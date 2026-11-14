@@ -1,7 +1,8 @@
 /**
  * Iris store (zustand): document, pages, selection, tool, viewport,
  * snapshot-based undo/redo with coalescing, clipboard, alignment,
- * grouping, z-order and localStorage autosave.
+ * grouping, z-order, doc settings (grid/guides/bg), style clipboard
+ * and localStorage autosave.
  */
 
 import { create } from 'zustand';
@@ -19,6 +20,8 @@ import {
   collectSubtree,
   isDescendantOf,
   isContainer,
+  DEFAULT_SETTINGS,
+  type DocSettings,
 } from './model';
 import {
   HandleKind,
@@ -31,6 +34,7 @@ import {
   mInvert,
   mMul,
   mTranslate,
+  mRotate,
   nodeLocalMatrix,
   nodeWorldAABB,
   nodeWorldMatrix,
@@ -47,9 +51,23 @@ import {
   renameDocInLibrary,
   saveDocToLibrary,
 } from './library';
+import { buildTemplate } from './templates';
 import { IrisRoute, pushRoute, replaceRoute, routeFromLocation } from './router';
 
-export type Tool = 'move' | 'hand' | 'frame' | 'rect' | 'ellipse' | 'line' | 'text' | 'pen';
+export type Tool =
+  | 'move'
+  | 'hand'
+  | 'frame'
+  | 'rect'
+  | 'ellipse'
+  | 'line'
+  | 'text'
+  | 'pen'
+  | 'polygon'
+  | 'star'
+  | 'arrow'
+  | 'eyedropper'
+  | 'image';
 
 export type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom' | 'hdist' | 'vdist';
 
@@ -81,6 +99,12 @@ export interface ContextMenuState {
 export interface ViewFlags {
   rulers: boolean;
   pixelGrid: boolean;
+  outline: boolean;
+}
+
+export interface ToastAction {
+  label: string;
+  run: () => void;
 }
 
 export interface IrisStore {
@@ -100,7 +124,7 @@ export interface IrisStore {
   contextMenu: ContextMenuState | null;
   exportOpen: boolean;
   shortcutsOpen: boolean;
-  toasts: { id: number; msg: string }[];
+  toasts: { id: number; msg: string; action?: ToastAction }[];
   savedName: string | null;
   dirty: boolean;
   /** id of the library document backing the editor; null on the homepage */
@@ -108,6 +132,8 @@ export interface IrisStore {
   /** current screen: file browser (home) or an open document */
   route: IrisRoute;
   canvasSize: { w: number; h: number };
+  /** copied style payload for copy/paste style */
+  styleClipboard: Partial<IrisNode> | null;
 
   /* tool / view */
   setTool: (tool: Tool) => void;
@@ -127,12 +153,15 @@ export interface IrisStore {
   addPage: () => void;
   deletePage: (id: ID) => void;
   renamePage: (id: ID, name: string) => void;
+  duplicatePage: (id: ID) => void;
+  movePage: (id: ID, dir: -1 | 1) => void;
   setDocName: (name: string) => void;
 
   /* selection */
   setSelection: (ids: ID[]) => void;
   toggleSelection: (id: ID) => void;
   selectAll: () => void;
+  selectSameType: () => void;
 
   /* history */
   pushHistory: (label?: string) => void;
@@ -169,15 +198,35 @@ export interface IrisStore {
   moveSelectionWorld: (dx: number, dy: number, label?: string) => void;
   renameNode: (id: ID, name: string) => void;
 
+  /* transforms */
+  flipSelection: (axis: 'h' | 'v') => void;
+  rotateSelectionBy: (deg: number) => void;
+  toggleLockSelection: () => void;
+  unlockAllOnPage: () => void;
+  toggleHideSelection: () => void;
+
+  /* style */
+  copyStyle: () => void;
+  pasteStyle: () => void;
+
+  /* doc settings */
+  setSettings: (patch: Partial<DocSettings>) => void;
+  setGridSettings: (patch: Partial<DocSettings['grid']>) => void;
+  addGuide: (axis: 'x' | 'y', at: number) => void;
+  moveGuide: (axis: 'x' | 'y', index: number, at: number) => void;
+  removeGuide: (axis: 'x' | 'y', index: number) => void;
+  clearGuides: () => void;
+
   /* editing */
   setEditingText: (id: ID | null) => void;
   setEditingPath: (id: ID | null) => void;
 
   /* images */
-  importImage: (src: string, w: number, h: number, at?: { x: number; y: number }) => ID;
+  importImage: (src: string, w: number, h: number, at?: { x: number; y: number }, parentId?: ID | null) => ID;
 
   /* files */
   newDoc: () => void;
+  newDocFromTemplate: (templateId: string) => void;
   loadDoc: (doc: unknown, savedName?: string | null, fitView?: boolean) => void;
   markSaved: (name: string) => void;
   openDoc: (id: ID, opts?: { push?: boolean }) => void;
@@ -188,7 +237,7 @@ export interface IrisStore {
   flushSave: () => void;
 
   /* ui */
-  toast: (msg: string) => void;
+  toast: (msg: string, action?: ToastAction) => void;
   dismissToast: (id: number) => void;
   openContextMenu: (x: number, y: number, worldX: number, worldY: number) => void;
   closeContextMenu: () => void;
@@ -207,7 +256,18 @@ function deepClone<T>(v: T): T {
 }
 
 function draftOf(doc: IrisDoc): IrisDoc {
-  return { name: doc.name, pages: doc.pages, pagesById: { ...doc.pagesById }, nodesById: { ...doc.nodesById } };
+  return {
+    name: doc.name,
+    pages: doc.pages,
+    pagesById: { ...doc.pagesById },
+    nodesById: { ...doc.nodesById },
+    settings: {
+      ...doc.settings,
+      grid: { ...doc.settings.grid },
+      guidesX: [...doc.settings.guidesX],
+      guidesY: [...doc.settings.guidesY],
+    },
+  };
 }
 
 function putNode(draft: IrisDoc, id: ID, patch: Partial<IrisNode> | ((n: IrisNode) => Partial<IrisNode>)): void {
@@ -407,6 +467,8 @@ export const useIris = create<IrisStore>()((set, get) => {
       pageId,
       children: n.children.map((c) => idMap.get(c)).filter((c): c is ID => !!c),
       points: n.points.map((p) => ({ ...p })),
+      fillGradient: n.fillGradient ? { ...n.fillGradient } : null,
+      shadow: n.shadow ? { ...n.shadow } : null,
     }));
     const worldTargets = new Map<ID, Mat>();
     for (const root of sourceRoots) {
@@ -443,6 +505,29 @@ export const useIris = create<IrisStore>()((set, get) => {
     return screenToWorld(viewport, Math.max(0, canvasSize.w / 2 - 10), Math.max(0, canvasSize.h / 2 - 10));
   };
 
+  /** Style fields copied by copy/paste style. */
+  const STYLE_FIELDS: (keyof IrisNode)[] = [
+    'fill',
+    'stroke',
+    'strokeWidth',
+    'cornerRadius',
+    'opacity',
+    'dash',
+    'fillGradient',
+    'shadow',
+    'blur',
+    'blend',
+    'fontFamily',
+    'fontSize',
+    'fontWeight',
+    'textAlign',
+    'lineHeight',
+    'letterSpacing',
+    'textCase',
+    'underline',
+    'strike',
+  ];
+
   return {
     doc: initialDoc,
     docId: booted?.docId ?? null,
@@ -454,7 +539,7 @@ export const useIris = create<IrisStore>()((set, get) => {
     editingTextId: null,
     editingPathId: null,
     hoverId: null,
-    viewFlags: { rulers: true, pixelGrid: true },
+    viewFlags: { rulers: true, pixelGrid: true, outline: false },
     past: [],
     future: [],
     clipboard: null,
@@ -465,6 +550,7 @@ export const useIris = create<IrisStore>()((set, get) => {
     savedName: null,
     dirty: false,
     canvasSize: { w: 800, h: 600 },
+    styleClipboard: null,
 
     /* ------------------------- tool / view ------------------------- */
     setTool: (tool) => {
@@ -580,6 +666,62 @@ export const useIris = create<IrisStore>()((set, get) => {
       if (!trimmed) return;
       commit((draft) => putPage(draft, id, { name: trimmed }), { history: false });
     },
+    duplicatePage: (id) => {
+      const state = get();
+      const page = state.doc.pagesById[id];
+      if (!page) return;
+      const copy = createPage(`${page.name} copy`);
+      const idMap = new Map<ID, ID>();
+      const clone: IrisNode[] = [];
+      const visit = (nid: ID): void => {
+        const n = state.doc.nodesById[nid];
+        if (!n) return;
+        const fresh = {
+          ...n,
+          id: n.id,
+          pageId: copy.id,
+          points: n.points.map((p) => ({ ...p })),
+          fillGradient: n.fillGradient ? { ...n.fillGradient } : null,
+          shadow: n.shadow ? { ...n.shadow } : null,
+        };
+        clone.push(fresh);
+        n.children.forEach(visit);
+      };
+      page.nodeIds.forEach(visit);
+      // fresh ids must be generated up-front to remap children
+      for (const n of clone) idMap.set(n.id, `${n.id}p${Math.random().toString(36).slice(2, 7)}`);
+      const remapped = clone.map((n) => ({
+        ...n,
+        id: idMap.get(n.id)!,
+        parentId: n.parentId ? (idMap.get(n.parentId) ?? null) : null,
+        children: n.children.map((c) => idMap.get(c)).filter((c): c is ID => !!c),
+      }));
+      commit(
+        (draft) => {
+          draft.pages = [...draft.pages, copy.id];
+          draft.pagesById[copy.id] = { ...copy, nodeIds: page.nodeIds.map((nid) => idMap.get(nid)!).filter(Boolean) };
+          for (const n of remapped) draft.nodesById[n.id] = n;
+        },
+        { history: 'page', selection: [] },
+      );
+      set({ currentPageId: copy.id });
+      get().toast(`Duplicated “${page.name}”`);
+    },
+    movePage: (id, dir) => {
+      const state = get();
+      const i = state.doc.pages.indexOf(id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= state.doc.pages.length) return;
+      commit(
+        (draft) => {
+          const pages = [...draft.pages];
+          const [moved] = pages.splice(i, 1);
+          pages.splice(j, 0, moved);
+          draft.pages = pages;
+        },
+        { history: 'page' },
+      );
+    },
     setDocName: (name) => {
       const trimmed = name.trim();
       if (!trimmed) return;
@@ -613,6 +755,31 @@ export const useIris = create<IrisStore>()((set, get) => {
       const { doc, currentPageId } = get();
       const page = doc.pagesById[currentPageId];
       if (page) set({ selection: [...page.nodeIds] });
+    },
+    selectSameType: () => {
+      const { doc, selection, currentPageId } = get();
+      const page = doc.pagesById[currentPageId];
+      if (!page || selection.length === 0) return;
+      const types = new Set(selection.map((id) => doc.nodesById[id]?.type).filter(Boolean) as NodeType[]);
+      const out: ID[] = [];
+      const visit = (nid: ID): void => {
+        const n = doc.nodesById[nid];
+        if (!n) return;
+        if (types.has(n.type)) out.push(nid);
+        n.children.forEach(visit);
+      };
+      page.nodeIds.forEach(visit);
+      // keep only top-level entries (drop nested descendants of the selection)
+      const top = out.filter((id) => {
+        let p = doc.nodesById[id]?.parentId;
+        while (p) {
+          if (out.includes(p)) return false;
+          p = doc.nodesById[p]?.parentId;
+        }
+        return true;
+      });
+      if (top.length) set({ selection: top });
+      get().toast(`Selected ${top.length} object${top.length === 1 ? '' : 's'} of the same type`);
     },
 
     /* --------------------------- history --------------------------- */
@@ -721,8 +888,8 @@ export const useIris = create<IrisStore>()((set, get) => {
           if (!n) return;
           const oldW = n.w;
           const oldH = n.h;
-          const w = Math.max(n.type === 'line' ? 0 : 1, rect.w);
-          const h = Math.max(n.type === 'line' ? 0 : 1, rect.h);
+          const w = Math.max(n.type === 'line' || n.type === 'arrow' ? 0 : 1, rect.w);
+          const h = Math.max(n.type === 'line' || n.type === 'arrow' ? 0 : 1, rect.h);
           putNode(draft, id, { x: rect.x, y: rect.y, w, h });
           if (isContainer(n) && oldW > 0.01 && oldH > 0.01) {
             scaleSubtree(draft, id, w / oldW, h / oldH, true);
@@ -754,6 +921,10 @@ export const useIris = create<IrisStore>()((set, get) => {
         },
         { history: 'delete', selection: [] },
       );
+      get().toast(`Deleted ${doomed.size} object${doomed.size === 1 ? '' : 's'}`, {
+        label: 'Undo',
+        run: () => get().undo(),
+      });
     },
     deleteSelection: () => get().deleteNodes(get().selection),
 
@@ -792,9 +963,8 @@ export const useIris = create<IrisStore>()((set, get) => {
       const roots = rootIds.map((id) => clip.nodes.find((n) => n.id === id)).filter(Boolean) as IrisNode[];
       const ids = new Set<ID>();
       const byId = Object.fromEntries(clip.nodes.map((n) => [n.id, n])) as Record<ID, IrisNode>;
-      roots.forEach((r) =>
-        collectSubtree({ pages: [], pagesById: {}, nodesById: byId, name: '' } as IrisDoc, r.id).forEach((n) => ids.add(n.id)),
-      );
+      const fakeDoc = { pages: [], pagesById: {}, nodesById: byId, name: '', settings: DEFAULT_SETTINGS } as unknown as IrisDoc;
+      roots.forEach((r) => collectSubtree(fakeDoc, r.id).forEach((n) => ids.add(n.id)));
       const nodes = clip.nodes.filter((n) => ids.has(n.id));
       const newRoots = pasteOrDuplicate(nodes, roots, dx, dy);
       if (newRoots.length) get().setSelection(newRoots);
@@ -942,7 +1112,7 @@ export const useIris = create<IrisStore>()((set, get) => {
             draft.nodesById[n.id] = updated;
           }
         },
-        { history: 'reorder' },
+        { history: 'reorder', selection: ids },
       );
     },
 
@@ -1060,7 +1230,7 @@ export const useIris = create<IrisStore>()((set, get) => {
             const ny = box.y + (a.y - box.y) * sy;
             const P = parentWorldMatrix(draft, draft.nodesById[n.id]);
             const local = mApply(mInvert(P), nx, ny);
-            const fresh: Partial<IrisNode> = { x: local.x, y: local.y, w: Math.max(1, n.w * sx), h: Math.max(n.type === 'line' ? 0 : 1, n.h * sy) };
+            const fresh: Partial<IrisNode> = { x: local.x, y: local.y, w: Math.max(1, n.w * sx), h: Math.max(n.type === 'line' || n.type === 'arrow' ? 0 : 1, n.h * sy) };
             if (n.type === 'text') {
               fresh.fontSize = Math.max(1, n.fontSize * ((sx + sy) / 2));
             }
@@ -1096,6 +1266,219 @@ export const useIris = create<IrisStore>()((set, get) => {
       commit((draft) => putNode(draft, id, { name: trimmed }), { history: 'rename' });
     },
 
+    /* -------------------------- transforms ------------------------- */
+    flipSelection: (axis) => {
+      const state = get();
+      if (state.selection.length === 0) return;
+      const key = axis === 'h' ? 'flipH' : 'flipV';
+      commit(
+        (draft) => {
+          for (const id of state.selection) {
+            const n = draft.nodesById[id];
+            if (!n) continue;
+            putNode(draft, id, { [key]: !n[key] } as Partial<IrisNode>);
+          }
+        },
+        { history: 'flip' },
+      );
+      get().toast(axis === 'h' ? 'Flipped horizontally' : 'Flipped vertically');
+    },
+
+    rotateSelectionBy: (deg) => {
+      const state = get();
+      const ids = state.selection;
+      if (ids.length === 0) return;
+      const box = boundsOfNodes(state.doc, ids);
+      if (!box) return;
+      const center = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
+      const R = mMul(mMul(mTranslate(center.x, center.y), mRotate(deg)), mTranslate(-center.x, -center.y));
+      const worlds = new Map<ID, Mat>();
+      ids.forEach((id) => {
+        const n = state.doc.nodesById[id];
+        if (n) worlds.set(id, nodeWorldMatrix(state.doc, n));
+      });
+      commit(
+        (draft) => {
+          for (const id of ids) {
+            const W = worlds.get(id);
+            const n = draft.nodesById[id];
+            if (!W || !n) continue;
+            const updated = { ...n };
+            applyLocalMatrix(updated, mMul(R, W));
+            draft.nodesById[id] = updated;
+          }
+        },
+        { history: 'rotate90' },
+      );
+    },
+
+    toggleLockSelection: () => {
+      const state = get();
+      if (state.selection.length === 0) return;
+      const lock = state.selection.some((id) => !state.doc.nodesById[id]?.locked);
+      commit(
+        (draft) => {
+          for (const id of state.selection) putNode(draft, id, { locked: lock });
+        },
+        { history: 'lock' },
+      );
+      get().toast(lock ? 'Locked selection' : 'Unlocked selection');
+    },
+
+    unlockAllOnPage: () => {
+      const state = get();
+      const page = state.doc.pagesById[state.currentPageId];
+      if (!page) return;
+      const locked: ID[] = [];
+      const visit = (nid: ID): void => {
+        const n = state.doc.nodesById[nid];
+        if (!n) return;
+        if (n.locked) locked.push(nid);
+        n.children.forEach(visit);
+      };
+      page.nodeIds.forEach(visit);
+      if (locked.length === 0) {
+        get().toast('Nothing is locked on this page');
+        return;
+      }
+      commit(
+        (draft) => {
+          for (const id of locked) putNode(draft, id, { locked: false });
+        },
+        { history: 'unlockAll' },
+      );
+      get().toast(`Unlocked ${locked.length} object${locked.length === 1 ? '' : 's'}`);
+    },
+
+    toggleHideSelection: () => {
+      const state = get();
+      if (state.selection.length === 0) return;
+      const hide = state.selection.some((id) => state.doc.nodesById[id]?.visible);
+      commit(
+        (draft) => {
+          for (const id of state.selection) putNode(draft, id, { visible: hide });
+        },
+        { history: 'visible', selection: hide ? [] : state.selection },
+      );
+      get().toast(hide ? 'Hidden selection' : 'Shown selection');
+    },
+
+    /* ---------------------------- style ---------------------------- */
+    copyStyle: () => {
+      const state = get();
+      if (state.selection.length === 0) return;
+      const n = state.doc.nodesById[state.selection[0]];
+      if (!n) return;
+      const style: Partial<IrisNode> = {};
+      for (const key of STYLE_FIELDS) {
+        const v = n[key];
+        if (v === null || v === undefined) continue;
+        if (typeof v === 'object') (style as Record<string, unknown>)[key] = { ...(v as object) };
+        else (style as Record<string, unknown>)[key] = v;
+      }
+      set({ styleClipboard: style });
+      get().toast(`Copied style of ${n.name}`);
+    },
+
+    pasteStyle: () => {
+      const state = get();
+      const style = state.styleClipboard;
+      if (!style) {
+        get().toast('No style copied yet');
+        return;
+      }
+      if (state.selection.length === 0) return;
+      commit(
+        (draft) => {
+          for (const id of state.selection) {
+            const n = draft.nodesById[id];
+            if (!n) continue;
+            const patch: Partial<IrisNode> = {};
+            for (const [k, v] of Object.entries(style)) {
+              if (k === 'fontFamily' && n.type !== 'text') continue;
+              if (['fontSize', 'fontWeight', 'textAlign', 'lineHeight', 'letterSpacing', 'textCase', 'underline', 'strike'].includes(k) && n.type !== 'text') continue;
+              (patch as Record<string, unknown>)[k] = typeof v === 'object' && v !== null ? { ...(v as object) } : v;
+            }
+            putNode(draft, id, patch);
+          }
+        },
+        { history: 'pasteStyle' },
+      );
+      get().toast(`Pasted style onto ${state.selection.length} object${state.selection.length === 1 ? '' : 's'}`);
+    },
+
+    /* ------------------------- doc settings ------------------------ */
+    setSettings: (patch) => {
+      commit(
+        (draft) => {
+          draft.settings = {
+            ...draft.settings,
+            ...patch,
+            grid: { ...draft.settings.grid, ...(patch.grid ?? {}) },
+            guidesX: patch.guidesX ?? [...draft.settings.guidesX],
+            guidesY: patch.guidesY ?? [...draft.settings.guidesY],
+          };
+        },
+        { history: 'settings' },
+      );
+    },
+    setGridSettings: (patch) => {
+      commit(
+        (draft) => {
+          draft.settings = { ...draft.settings, grid: { ...draft.settings.grid, ...patch } };
+        },
+        { history: 'settings' },
+      );
+    },
+    addGuide: (axis, at) => {
+      commit(
+        (draft) => {
+          if (axis === 'x') draft.settings.guidesX = [...draft.settings.guidesX, Math.round(at)];
+          else draft.settings.guidesY = [...draft.settings.guidesY, Math.round(at)];
+        },
+        { history: 'guide' },
+      );
+    },
+    moveGuide: (axis, index, at) => {
+      commit(
+        (draft) => {
+          if (axis === 'x') {
+            const list = [...draft.settings.guidesX];
+            if (index < 0 || index >= list.length) return;
+            list[index] = Math.round(at);
+            draft.settings.guidesX = list;
+          } else {
+            const list = [...draft.settings.guidesY];
+            if (index < 0 || index >= list.length) return;
+            list[index] = Math.round(at);
+            draft.settings.guidesY = list;
+          }
+        },
+        { history: false },
+      );
+    },
+    removeGuide: (axis, index) => {
+      commit(
+        (draft) => {
+          if (axis === 'x') draft.settings.guidesX = draft.settings.guidesX.filter((_, i) => i !== index);
+          else draft.settings.guidesY = draft.settings.guidesY.filter((_, i) => i !== index);
+        },
+        { history: 'guide' },
+      );
+    },
+    clearGuides: () => {
+      const s = get();
+      if (!s.doc.settings.guidesX.length && !s.doc.settings.guidesY.length) return;
+      commit(
+        (draft) => {
+          draft.settings.guidesX = [];
+          draft.settings.guidesY = [];
+        },
+        { history: 'guide' },
+      );
+      get().toast('Cleared all guides');
+    },
+
     /* --------------------------- editing --------------------------- */
     setEditingText: (id) => {
       if (id) get().setSelection([id]);
@@ -1107,22 +1490,34 @@ export const useIris = create<IrisStore>()((set, get) => {
     },
 
     /* --------------------------- images ---------------------------- */
-    importImage: (src, w, h, at) => {
+    importImage: (src, w, h, at, parentId) => {
       const state = get();
       const scale = Math.min(1, 800 / Math.max(w, h, 1));
       const nw = Math.max(1, Math.round(w * scale));
       const nh = Math.max(1, Math.round(h * scale));
       const center = at ?? viewportCenter();
+      let x = center.x - nw / 2;
+      let y = center.y - nh / 2;
+      // when parenting into a frame, convert to parent-local coords
+      if (parentId) {
+        const parent = state.doc.nodesById[parentId];
+        if (parent) {
+          const inv = mInvert(nodeWorldMatrix(state.doc, parent));
+          const local = mApply(inv, x, y);
+          x = local.x;
+          y = local.y;
+        }
+      }
       return get().addNode(
         'image',
         {
           src,
           w: nw,
           h: nh,
-          x: center.x - nw / 2,
-          y: center.y - nh / 2,
+          x,
+          y,
         },
-        null,
+        parentId ?? null,
       );
     },
 
@@ -1155,6 +1550,29 @@ export const useIris = create<IrisStore>()((set, get) => {
       });
       pushRoute({ kind: 'doc', id });
       get().toast('New document created');
+    },
+
+    newDocFromTemplate: (templateId) => {
+      get().flushSave();
+      const doc = buildTemplate(templateId);
+      const entry = importDocIntoLibrary(doc);
+      set({
+        doc,
+        docId: entry.id,
+        route: { kind: 'doc', id: entry.id },
+        currentPageId: doc.pages[0],
+        selection: [],
+        past: [],
+        future: [],
+        clipboard: null,
+        editingTextId: null,
+        editingPathId: null,
+        savedName: null,
+        dirty: false,
+        viewport: { x: 60, y: 60, zoom: 0.75 },
+      });
+      pushRoute({ kind: 'doc', id: entry.id });
+      get().toast(`Created “${doc.name}”`);
     },
 
     /**
@@ -1252,10 +1670,10 @@ export const useIris = create<IrisStore>()((set, get) => {
     markSaved: (name) => set({ savedName: name, dirty: false }),
 
     /* ------------------------------ ui ----------------------------- */
-    toast: (msg) => {
+    toast: (msg, action) => {
       const id = toastSeq++;
-      set((s) => ({ toasts: [...s.toasts.slice(-3), { id, msg }] }));
-      setTimeout(() => get().dismissToast(id), 2400);
+      set((s) => ({ toasts: [...s.toasts.slice(-3), { id, msg, action }] }));
+      setTimeout(() => get().dismissToast(id), action ? 5000 : 2400);
     },
     dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
     openContextMenu: (x, y, worldX, worldY) => set({ contextMenu: { x, y, worldX, worldY } }),

@@ -8,6 +8,7 @@ import {
   IrisDoc,
   IrisNode,
   PathPoint,
+  TextCase,
 } from './model';
 
 export interface Mat {
@@ -91,12 +92,27 @@ export function mInvert(m: Mat): Mat {
 /* Node transforms                                                     */
 /* ------------------------------------------------------------------ */
 
-/** local -> parent matrix (rotation about the box center). */
+/** local -> parent matrix (flip about center, then rotation about center). */
 export function nodeLocalMatrix(n: IrisNode): Mat {
-  if (!n.rotation) return mTranslate(n.x, n.y);
-  const cx = n.x + n.w / 2;
-  const cy = n.y + n.h / 2;
-  return mMul(mMul(mTranslate(cx, cy), mRotate(n.rotation)), mTranslate(-n.w / 2, -n.h / 2));
+  const flip = n.flipH || n.flipV;
+  if (!n.rotation && !flip) return mTranslate(n.x, n.y);
+  const cx = n.w / 2;
+  const cy = n.h / 2;
+  let m = mTranslate(n.x, n.y);
+  m = mMul(m, mTranslate(cx, cy));
+  if (n.rotation) m = mMul(m, mRotate(n.rotation));
+  if (flip) m = mMul(m, mScale(n.flipH ? -1 : 1, n.flipV ? -1 : 1));
+  m = mMul(m, mTranslate(-cx, -cy));
+  return m;
+}
+
+/** Center-flip matrix of a node (identity when not flipped). */
+function centerFlipMatrix(n: Pick<IrisNode, 'w' | 'h' | 'flipH' | 'flipV'>): Mat {
+  if (!n.flipH && !n.flipV) return { ...IDENTITY };
+  return mMul(
+    mMul(mTranslate(n.w / 2, n.h / 2), mScale(n.flipH ? -1 : 1, n.flipV ? -1 : 1)),
+    mTranslate(-n.w / 2, -n.h / 2),
+  );
 }
 
 /** local -> world matrix. */
@@ -121,11 +137,13 @@ export function parentWorldMatrix(doc: IrisDoc, n: IrisNode): Mat {
 
 /** Compute the x/y/rotation a node needs so that its world matrix equals `target`. */
 export function setNodeWorldTransform(n: IrisNode, target: Mat): { x: number; y: number; rotation: number } {
-  let rot = (Math.atan2(target.b, target.a) * 180) / Math.PI;
+  /* remove the node's center-flip so the remainder is a pure rot+translate */
+  const L = mMul(target, mInvert(centerFlipMatrix(n)));
+  let rot = (Math.atan2(L.b, L.a) * 180) / Math.PI;
   rot = normalizeAngle(rot);
   // Rc = rotation about center of the (w, h) box at origin
   const rc = mMul(mMul(mTranslate(n.w / 2, n.h / 2), mRotate(rot)), mTranslate(-n.w / 2, -n.h / 2));
-  const t = mMul(target, mInvert(rc));
+  const t = mMul(L, mInvert(rc));
   return { x: t.e, y: t.f, rotation: rot };
 }
 
@@ -321,6 +339,139 @@ export function path2dForPoints(points: PathPoint[], closed: boolean): Path2D {
   return p;
 }
 
+/* ------------------------------------------------------------------ */
+/* Regular polygon / star geometry                                     */
+/* ------------------------------------------------------------------ */
+
+/** Vertices (local coords) of a regular polygon inscribed in the w×h box. */
+export function polygonPoints(n: Pick<IrisNode, 'w' | 'h' | 'sides'>): Vec[] {
+  const k = Math.max(3, Math.round(n.sides));
+  const rx = n.w / 2;
+  const ry = n.h / 2;
+  const pts: Vec[] = [];
+  for (let i = 0; i < k; i++) {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / k;
+    pts.push({ x: rx + rx * Math.cos(a), y: ry + ry * Math.sin(a) });
+  }
+  return pts;
+}
+
+/** Vertices (local coords) of a star inscribed in the w×h box. */
+export function starPointsOf(n: Pick<IrisNode, 'w' | 'h' | 'starPoints' | 'innerRadius'>): Vec[] {
+  const k = Math.max(3, Math.round(n.starPoints));
+  const rx = n.w / 2;
+  const ry = n.h / 2;
+  const inner = Math.min(0.95, Math.max(0.05, n.innerRadius));
+  const pts: Vec[] = [];
+  for (let i = 0; i < k * 2; i++) {
+    const isOuter = i % 2 === 0;
+    const r = isOuter ? 1 : inner;
+    const a = -Math.PI / 2 + (i * Math.PI) / k;
+    pts.push({ x: rx + rx * r * Math.cos(a), y: ry + ry * r * Math.sin(a) });
+  }
+  return pts;
+}
+
+/** Build a Path2D for a polygon or star node in LOCAL coordinates. */
+export function regularPath2d(n: IrisNode): Path2D {
+  const pts = n.type === 'star' ? starPointsOf(n) : polygonPoints(n);
+  const p = new Path2D();
+  if (pts.length === 0) return p;
+  p.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) p.lineTo(pts[i].x, pts[i].y);
+  p.closePath();
+  return p;
+}
+
+/* ------------------------------------------------------------------ */
+/* Arrow geometry                                                      */
+/* ------------------------------------------------------------------ */
+
+/** Endpoints of an arrow/line segment in local coords. */
+export function segmentEnds(n: Pick<IrisNode, 'w' | 'h' | 'flip'>): { a: Vec; b: Vec } {
+  return n.flip
+    ? { a: { x: n.w, y: 0 }, b: { x: 0, y: n.h } }
+    : { a: { x: 0, y: 0 }, b: { x: n.w, y: n.h } };
+}
+
+/** Head size for an arrow stroke width. */
+export function arrowHeadSize(strokeWidth: number): number {
+  return Math.max(8, strokeWidth * 4.5);
+}
+
+/** Triangular head path at point `tip` pointing along `dir` (unit vector). */
+function arrowHeadPath(tip: Vec, dir: Vec, size: number, inset: number): Path2D {
+  const p = new Path2D();
+  const px = -dir.y;
+  const py = dir.x;
+  const back = { x: tip.x - dir.x * size, y: tip.y - dir.y * size };
+  p.moveTo(tip.x, tip.y);
+  p.lineTo(back.x + px * size * 0.4, back.y + py * size * 0.4);
+  p.lineTo(back.x - px * size * 0.4, back.y - py * size * 0.4);
+  p.closePath();
+  void inset;
+  return p;
+}
+
+/** Full arrow path (shaft + heads) in local coords; also returns head fills. */
+export function arrowPath2d(n: IrisNode): { shaft: Path2D; heads: Path2D[] } {
+  const { a, b } = segmentEnds(n);
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const dir = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+  const size = arrowHeadSize(n.strokeWidth);
+  const heads: Path2D[] = [];
+  const shaft = new Path2D();
+  if (n.arrowEnd !== 'none') {
+    const tipB = { x: b.x - dir.x * size * 0.85, y: b.y - dir.y * size * 0.85 };
+    shaft.moveTo(a.x, a.y);
+    shaft.lineTo(tipB.x, tipB.y);
+    if (n.arrowEnd !== 'line') heads.push(arrowHeadPath(b, dir, size, 0));
+    else {
+      const h = new Path2D();
+      const px = -dir.y;
+      const py = dir.x;
+      const back = { x: b.x - dir.x * size * 0.7, y: b.y - dir.y * size * 0.7 };
+      h.moveTo(back.x + px * size * 0.4, back.y + py * size * 0.4);
+      h.lineTo(b.x, b.y);
+      h.lineTo(back.x - px * size * 0.4, back.y - py * size * 0.4);
+      heads.push(h);
+    }
+  } else {
+    shaft.moveTo(a.x, a.y);
+    shaft.lineTo(b.x, b.y);
+  }
+  if (n.arrowStart !== 'none') {
+    const d2 = { x: -dir.x, y: -dir.y };
+    if (n.arrowStart !== 'line') heads.push(arrowHeadPath(a, d2, size, 0));
+    else {
+      const h = new Path2D();
+      const px = -d2.y;
+      const py = d2.x;
+      const back = { x: a.x - d2.x * size * 0.7, y: a.y - d2.y * size * 0.7 };
+      h.moveTo(back.x + px * size * 0.4, back.y + py * size * 0.4);
+      h.lineTo(a.x, a.y);
+      h.lineTo(back.x - px * size * 0.4, back.y - py * size * 0.4);
+      heads.push(h);
+    }
+  }
+  return { shaft, heads };
+}
+
+/* ------------------------------------------------------------------ */
+/* Gradient helper                                                     */
+/* ------------------------------------------------------------------ */
+
+/** Line endpoints (local coords) spanning a w×h box at `angleDeg`. */
+export function gradientLine(w: number, h: number, angleDeg: number): { x1: number; y1: number; x2: number; y2: number } {
+  const a = (angleDeg * Math.PI) / 180;
+  const cx = w / 2;
+  const cy = h / 2;
+  const len = Math.abs(w * Math.cos(a)) + Math.abs(h * Math.sin(a));
+  const dx = (Math.cos(a) * len) / 2;
+  const dy = (Math.sin(a) * len) / 2;
+  return { x1: cx - dx, y1: cy - dy, x2: cx + dx, y2: cy + dy };
+}
+
 /** Point-in-shape test for a single node in WORLD coordinates. */
 export function hitTestNode(doc: IrisDoc, n: IrisNode, worldPt: Vec, tolerance: number): boolean {
   if (!n.visible || n.locked) return false;
@@ -330,7 +481,9 @@ export function hitTestNode(doc: IrisDoc, n: IrisNode, worldPt: Vec, tolerance: 
     case 'rect':
     case 'frame':
     case 'text':
-    case 'image': {
+    case 'image':
+    case 'polygon':
+    case 'star': {
       if (p.x < -tolerance || p.y < -tolerance || p.x > n.w + tolerance || p.y > n.h + tolerance) return false;
       // rounded corner check for rects with radius
       if ((n.type === 'rect' || n.type === 'frame') && n.cornerRadius > 0) {
@@ -352,9 +505,31 @@ export function hitTestNode(doc: IrisDoc, n: IrisNode, worldPt: Vec, tolerance: 
       return dx * dx + dy * dy <= 1;
     }
     case 'line': {
-      const a = n.flip ? { x: n.w, y: 0 } : { x: 0, y: 0 };
-      const b = n.flip ? { x: 0, y: n.h } : { x: n.w, y: n.h };
+      const { a, b } = segmentEnds(n);
       return distToSegment(p, a, b) <= Math.max(tolerance, n.strokeWidth / 2 + tolerance * 0.5);
+    }
+    case 'arrow': {
+      const ctxA = getHitCtx();
+      const { shaft, heads } = arrowPath2d(n);
+      if (ctxA) {
+        ctxA.lineWidth = Math.max(n.strokeWidth, 1) + tolerance * 2;
+        ctxA.strokeStyle = '#000';
+        if (ctxA.isPointInStroke(shaft, p.x, p.y)) return true;
+        for (const head of heads) if (ctxA.isPointInPath(head, p.x, p.y)) return true;
+        return false;
+      }
+      const ends = segmentEnds(n);
+      return distToSegment(p, ends.a, ends.b) <= Math.max(tolerance, n.strokeWidth / 2 + tolerance * 0.5) + 6;
+    }
+    case 'polygon':
+    case 'star': {
+      const ctxP = getHitCtx();
+      const path = regularPath2d(n);
+      if (!ctxP) return pointInRect({ x: 0, y: 0, w: n.w, h: n.h }, p);
+      if (n.fill && ctxP.isPointInPath(path, p.x, p.y)) return true;
+      ctxP.lineWidth = Math.max(n.strokeWidth, 1) + tolerance * 2;
+      ctxP.strokeStyle = '#000';
+      return ctxP.isPointInStroke(path, p.x, p.y);
     }
     case 'path': {
       const ctx = getHitCtx();
@@ -455,15 +630,24 @@ export function marqueeCandidates(doc: IrisDoc, pageId: ID, rect: Rect): ID[] {
 }
 
 /** Deepest frame containing a world point (for new-object parenting).
- *  Prefers frames higher in z-order, then deeper in the tree. */
-export function frameAtPoint(doc: IrisDoc, pageId: ID, worldPt: Vec): IrisNode | null {
+ *  Prefers frames higher in z-order, then deeper in the tree.
+ *  `excludeIds` (and their descendants) are ignored — used while dragging
+ *  nodes so a dragged frame cannot become its own parent. */
+export function frameAtPoint(
+  doc: IrisDoc,
+  pageId: ID,
+  worldPt: Vec,
+  excludeIds?: ID[],
+): IrisNode | null {
   const page = doc.pagesById[pageId];
   if (!page) return null;
+  const excluded = new Set<ID>(excludeIds ?? []);
   let best: IrisNode | null = null;
   const visitDeep = (id: ID) => {
     const n = doc.nodesById[id];
-    if (!n || !n.visible) return;
-    n.children.forEach(visitDeep);
+    if (!n || !n.visible || excluded.has(id)) return;
+    // children (topmost sibling first) take priority over the frame itself
+    for (let i = n.children.length - 1; i >= 0; i--) visitDeep(n.children[i]);
     if (n.type === 'frame' && !best) {
       const p = mApply(mInvert(nodeWorldMatrix(doc, n)), worldPt.x, worldPt.y);
       if (p.x >= 0 && p.y >= 0 && p.x <= n.w && p.y <= n.h) best = n;
@@ -564,6 +748,28 @@ export function fontString(n: Pick<IrisNode, 'fontWeight' | 'fontSize' | 'fontFa
   return `${n.fontWeight} ${n.fontSize}px ${cssFontFamily(n.fontFamily)}`;
 }
 
+/** Apply a text-case transform to a string. */
+export function applyTextCase(text: string, textCase: TextCase): string {
+  switch (textCase) {
+    case 'upper':
+      return text.toUpperCase();
+    case 'lower':
+      return text.toLowerCase();
+    case 'title':
+      return text.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+    default:
+      return text;
+  }
+}
+
+/** Dash array for a dash style (canvas / SVG). */
+export function dashArray(style: IrisNode['dash'], strokeWidth: number): number[] {
+  const s = Math.max(1, strokeWidth);
+  if (style === 'dashed') return [s * 4, s * 3];
+  if (style === 'dotted') return [s * 0.01, s * 2.2];
+  return [];
+}
+
 export interface TextMetrics {
   lines: string[];
   width: number;
@@ -574,16 +780,25 @@ export interface TextMetrics {
 
 /** Lay out a text node: split on newlines, wrap at node.w unless autoWidth. */
 export function measureText(
-  n: Pick<IrisNode, 'text' | 'fontWeight' | 'fontSize' | 'fontFamily' | 'lineHeight' | 'autoWidth' | 'w' | 'textAlign'>,
+  n: Pick<IrisNode, 'text' | 'fontWeight' | 'fontSize' | 'fontFamily' | 'lineHeight' | 'autoWidth' | 'w' | 'textAlign' | 'letterSpacing' | 'textCase'>,
   wrapWidth?: number,
 ): TextMetrics {
   const ctx = getMeasureCtx();
   const fs = fontString(n);
   const maxW = wrapWidth ?? n.w;
-  const paragraphs = (n.text ?? '').split('\n');
+  const spacing = n.letterSpacing ?? 0;
+  const paragraphs = applyTextCase(n.text ?? '', n.textCase ?? 'as-typed').split('\n');
   const lines: string[] = [];
-  if (ctx) ctx.font = fs;
-  const measure = (s: string) => (ctx ? ctx.measureText(s).width : s.length * n.fontSize * 0.55);
+  if (ctx) {
+    ctx.font = fs;
+    try {
+      (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${spacing}px`;
+    } catch {
+      /* letterSpacing unsupported — approximate below */
+    }
+  }
+  const measure = (s: string) =>
+    ctx ? ctx.measureText(s).width + spacing * Math.max(0, s.length - 1) : s.length * n.fontSize * 0.55;
   for (const para of paragraphs) {
     if (n.autoWidth || maxW <= 0 || para === '') {
       lines.push(para);
@@ -611,6 +826,11 @@ export function measureText(
     const m = ctx.measureText('Hg');
     if (m.actualBoundingBoxAscent) ascent = m.actualBoundingBoxAscent;
     if (m.actualBoundingBoxDescent) descent = m.actualBoundingBoxDescent;
+    try {
+      (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = '0px';
+    } catch {
+      /* ignore */
+    }
   }
   const lineH = n.fontSize * n.lineHeight;
   return {

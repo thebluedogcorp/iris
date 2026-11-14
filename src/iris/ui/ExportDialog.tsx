@@ -14,12 +14,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { useIris } from '../engine/store';
-import { exportPNG, exportSVG, type ExportScope } from '../engine/export';
+import { exportRaster, exportSVG, type ExportScope, type RasterFormat } from '../engine/export';
 import { boundsOfNodes } from '../engine/geometry';
 
-type ExportFormat = 'png' | 'svg';
-type ExportScale = 1 | 2;
+type ExportFormat = 'png' | 'jpg' | 'svg';
+type ExportScale = 1 | 2 | 3 | 4;
 
 interface SegOption<T extends string | number> {
   value: T;
@@ -81,6 +82,7 @@ function ExportDialogBody() {
   );
   const [format, setFormat] = useState<ExportFormat>('png');
   const [scale, setScale] = useState<ExportScale>(2);
+  const [transparent, setTransparent] = useState(false);
 
   const hasSelection = selection.length > 0;
   /* never stay on "selection" when the selection vanished mid-dialog */
@@ -94,12 +96,12 @@ function ExportDialogBody() {
         ? boundsOfNodes(doc, page.nodeIds)
         : null;
   const hasContent = !!bounds && bounds.w > 0.5 && bounds.h > 0.5;
-  const effScale = format === 'png' ? scale : 1;
+  const effScale = format === 'svg' ? 1 : scale;
 
   const doExport = (): void => {
     if (!hasContent) return;
-    if (format === 'png') void exportPNG(effectiveScope, scale);
-    else exportSVG(effectiveScope);
+    if (format === 'svg') exportSVG(effectiveScope);
+    else void exportRaster(effectiveScope, scale, { format: format as RasterFormat, transparent });
     setExportOpen(false);
   };
 
@@ -131,6 +133,7 @@ function ExportDialogBody() {
             onChange={setFormat}
             options={[
               { value: 'png', label: 'PNG' },
+              { value: 'jpg', label: 'JPG' },
               { value: 'svg', label: 'SVG' },
             ]}
           />
@@ -146,10 +149,24 @@ function ExportDialogBody() {
               options={[
                 { value: 1, label: '1x' },
                 { value: 2, label: '2x' },
+                { value: 3, label: '3x' },
+                { value: 4, label: '4x' },
               ]}
             />
           </div>
         )}
+
+        {format === 'png' ? (
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-[#C9C9C9]">Transparent background</span>
+            <Switch
+              checked={transparent}
+              aria-label="Transparent background"
+              className="data-[state=checked]:bg-[#8B5CF6] data-[state=unchecked]:bg-[#383838]"
+              onCheckedChange={setTransparent}
+            />
+          </div>
+        ) : null}
 
         <p className="text-[11px] text-[#9A9A9A]">
           {hasContent && bounds

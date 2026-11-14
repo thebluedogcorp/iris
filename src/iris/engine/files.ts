@@ -8,7 +8,7 @@
 import { IrisDoc } from './model';
 import { useIris } from './store';
 import { downloadBlob } from './export';
-import { screenToWorld } from './geometry';
+import { frameAtPoint, screenToWorld } from './geometry';
 
 export interface RecentDoc {
   name: string;
@@ -160,7 +160,10 @@ export async function importImageFiles(files: File[] | FileList, at?: { x: numbe
     try {
       const src = await readAsDataURL(file);
       const { w, h } = await imageSize(src);
-      useIris.getState().importImage(src, w, h, { x: center.x + i * 24, y: center.y + i * 24 });
+      const place = { x: center.x + i * 24, y: center.y + i * 24 };
+      const st = useIris.getState();
+      const parent = frameAtPoint(st.doc, st.currentPageId, place);
+      useIris.getState().importImage(src, w, h, place, parent?.id ?? null);
       i += 1;
     } catch {
       /* skip bad file */
@@ -169,14 +172,14 @@ export async function importImageFiles(files: File[] | FileList, at?: { x: numbe
   if (i > 0) s.toast(`Imported ${i} image${i > 1 ? 's' : ''}`);
 }
 
-/** File picker for the toolbar image button. */
-export function pickImageFiles(): void {
+/** File picker for the toolbar image button; optionally places at a world point. */
+export function pickImageFiles(at?: { x: number; y: number }): void {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/*';
   input.multiple = true;
   input.onchange = () => {
-    if (input.files?.length) void importImageFiles(input.files);
+    if (input.files?.length) void importImageFiles(input.files, at);
   };
   input.click();
 }

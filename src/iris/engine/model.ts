@@ -17,9 +17,15 @@ export type NodeType =
   | 'line'
   | 'path'
   | 'text'
-  | 'image';
+  | 'image'
+  | 'polygon'
+  | 'star'
+  | 'arrow';
 
 export type TextAlign = 'left' | 'center' | 'right';
+export type TextCase = 'as-typed' | 'upper' | 'lower' | 'title';
+export type DashStyle = 'solid' | 'dashed' | 'dotted';
+export type ArrowHead = 'none' | 'arrow' | 'triangle' | 'line';
 
 /** A pen-tool point. (x, y) is the anchor; (hx, hy) is the "out" handle offset
  *  from the anchor. The "in" handle is mirrored: (-hx, -hy). (0,0) = corner point. */
@@ -29,6 +35,40 @@ export interface PathPoint {
   hx: number;
   hy: number;
 }
+
+/** Two-stop gradient fill. */
+export interface GradientFill {
+  type: 'linear' | 'radial';
+  /** degrees, linear only */
+  angle: number;
+  from: string;
+  to: string;
+}
+
+export interface ShadowEffect {
+  x: number;
+  y: number;
+  blur: number;
+  color: string;
+}
+
+export type BlendMode =
+  | 'normal'
+  | 'multiply'
+  | 'screen'
+  | 'overlay'
+  | 'darken'
+  | 'lighten'
+  | 'color-dodge'
+  | 'color-burn'
+  | 'hard-light'
+  | 'soft-light'
+  | 'difference'
+  | 'exclusion'
+  | 'hue'
+  | 'saturation'
+  | 'color'
+  | 'luminosity';
 
 export interface IrisNode {
   id: ID;
@@ -63,6 +103,11 @@ export interface IrisNode {
   lineHeight: number;
   /** grow width to fit text (single-line-ish behavior) */
   autoWidth: boolean;
+  /** px between characters */
+  letterSpacing: number;
+  textCase: TextCase;
+  underline: boolean;
+  strike: boolean;
   /* path */
   points: PathPoint[];
   closed: boolean;
@@ -74,6 +119,26 @@ export interface IrisNode {
   clip: boolean;
   /** line only: when true the segment runs (w,0) -> (0,h) instead of (0,0) -> (w,h) */
   flip: boolean;
+  /* polygon */
+  sides: number;
+  /* star */
+  starPoints: number;
+  /** 0..1 ratio of inner to outer radius */
+  innerRadius: number;
+  /* arrow */
+  arrowStart: ArrowHead;
+  arrowEnd: ArrowHead;
+  /* appearance extras */
+  fillGradient: GradientFill | null;
+  shadow: ShadowEffect | null;
+  /** layer blur radius in px */
+  blur: number;
+  blend: BlendMode;
+  dash: DashStyle;
+  /** mirror horizontally about the box center */
+  flipH: boolean;
+  /** mirror vertically about the box center */
+  flipV: boolean;
 }
 
 export interface IrisPage {
@@ -83,12 +148,23 @@ export interface IrisPage {
   nodeIds: ID[];
 }
 
+export interface DocSettings {
+  /** layout grid */
+  grid: { size: number; show: boolean; snap: boolean };
+  /** canvas backdrop color */
+  bg: string;
+  /** ruler guides at world coordinates */
+  guidesX: number[];
+  guidesY: number[];
+}
+
 export interface IrisDoc {
   name: string;
   /** page order */
   pages: ID[];
   pagesById: Record<ID, IrisPage>;
   nodesById: Record<ID, IrisNode>;
+  settings: DocSettings;
 }
 
 export const NODE_TYPE_LABEL: Record<NodeType, string> = {
@@ -100,6 +176,35 @@ export const NODE_TYPE_LABEL: Record<NodeType, string> = {
   path: 'Vector',
   text: 'Text',
   image: 'Image',
+  polygon: 'Polygon',
+  star: 'Star',
+  arrow: 'Arrow',
+};
+
+export const BLEND_MODES: BlendMode[] = [
+  'normal',
+  'multiply',
+  'screen',
+  'overlay',
+  'darken',
+  'lighten',
+  'color-dodge',
+  'color-burn',
+  'hard-light',
+  'soft-light',
+  'difference',
+  'exclusion',
+  'hue',
+  'saturation',
+  'color',
+  'luminosity',
+];
+
+export const DEFAULT_SETTINGS: DocSettings = {
+  grid: { size: 8, show: false, snap: false },
+  bg: '#242424',
+  guidesX: [],
+  guidesY: [],
 };
 
 let idCounter = 0;
@@ -139,6 +244,20 @@ function defaultsFor(type: NodeType): Partial<IrisNode> {
       };
     case 'image':
       return { w: 100, h: 100, fill: null, name: 'Image' };
+    case 'polygon':
+      return { w: 100, h: 100, fill: '#D9D9D9', sides: 6, name: 'Polygon' };
+    case 'star':
+      return { w: 100, h: 100, fill: '#D9D9D9', starPoints: 5, innerRadius: 0.45, name: 'Star' };
+    case 'arrow':
+      return {
+        w: 100,
+        h: 0,
+        fill: null,
+        stroke: '#B3B3B3',
+        strokeWidth: 1,
+        arrowEnd: 'arrow',
+        name: 'Arrow',
+      };
   }
 }
 
@@ -172,12 +291,28 @@ export function createNode(
     textAlign: 'left',
     lineHeight: 1.25,
     autoWidth: false,
+    letterSpacing: 0,
+    textCase: 'as-typed',
+    underline: false,
+    strike: false,
     points: [],
     closed: false,
     src: null,
     children: [],
     clip: false,
     flip: false,
+    sides: 6,
+    starPoints: 5,
+    innerRadius: 0.45,
+    arrowStart: 'none',
+    arrowEnd: 'arrow',
+    fillGradient: null,
+    shadow: null,
+    blur: 0,
+    blend: 'normal',
+    dash: 'solid',
+    flipH: false,
+    flipV: false,
     ...defaultsFor(type),
     ...patch,
   };
@@ -194,6 +329,7 @@ export function createDefaultDoc(): IrisDoc {
     pages: [page.id],
     pagesById: { [page.id]: page },
     nodesById: {},
+    settings: { ...DEFAULT_SETTINGS, grid: { ...DEFAULT_SETTINGS.grid }, guidesX: [], guidesY: [] },
   };
 }
 
@@ -294,6 +430,8 @@ export function cloneSubtree(
     parentId: n.id === rootId ? parentId : (idMap.get(n.parentId ?? '') ?? null),
     children: n.children.map((c) => idMap.get(c)!).filter(Boolean),
     points: n.points.map((p) => ({ ...p })),
+    fillGradient: n.fillGradient ? { ...n.fillGradient } : null,
+    shadow: n.shadow ? { ...n.shadow } : null,
   }));
   return { nodes: cloned, rootId: idMap.get(rootId)! };
 }
@@ -301,6 +439,38 @@ export function cloneSubtree(
 /* ------------------------------------------------------------------ */
 /* Load-time normalization (autosave / .iris files from older builds)  */
 /* ------------------------------------------------------------------ */
+
+const VALID_TYPES: NodeType[] = [
+  'frame',
+  'group',
+  'rect',
+  'ellipse',
+  'line',
+  'path',
+  'text',
+  'image',
+  'polygon',
+  'star',
+  'arrow',
+];
+
+function normalizeSettings(raw: unknown): DocSettings {
+  const s: DocSettings = { ...DEFAULT_SETTINGS, grid: { ...DEFAULT_SETTINGS.grid }, guidesX: [], guidesY: [] };
+  if (!raw || typeof raw !== 'object') return s;
+  const src = raw as Partial<DocSettings>;
+  if (src.grid && typeof src.grid === 'object') {
+    const g = src.grid;
+    s.grid = {
+      size: typeof g.size === 'number' && g.size >= 1 ? g.size : 8,
+      show: !!g.show,
+      snap: !!g.snap,
+    };
+  }
+  if (typeof src.bg === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(src.bg)) s.bg = src.bg;
+  if (Array.isArray(src.guidesX)) s.guidesX = src.guidesX.filter((v): v is number => typeof v === 'number');
+  if (Array.isArray(src.guidesY)) s.guidesY = src.guidesY.filter((v): v is number => typeof v === 'number');
+  return s;
+}
 
 export function normalizeDoc(raw: unknown): IrisDoc {
   const base = createDefaultDoc();
@@ -311,6 +481,7 @@ export function normalizeDoc(raw: unknown): IrisDoc {
     pages: Array.isArray(src.pages) && src.pages.length ? src.pages.slice() : base.pages,
     pagesById: {},
     nodesById: {},
+    settings: normalizeSettings(src.settings),
   };
   for (const p of Object.values(src.pagesById ?? {})) {
     if (p && typeof p === 'object' && typeof p.id === 'string') {
@@ -331,11 +502,7 @@ export function normalizeDoc(raw: unknown): IrisDoc {
   for (const n of Object.values(src.nodesById ?? {})) {
     if (!n || typeof n !== 'object' || typeof n.id !== 'string') continue;
     const node = createNode(
-      (['frame', 'group', 'rect', 'ellipse', 'line', 'path', 'text', 'image'] as NodeType[]).includes(
-        n.type as NodeType,
-      )
-        ? (n.type as NodeType)
-        : 'rect',
+      VALID_TYPES.includes(n.type as NodeType) ? (n.type as NodeType) : 'rect',
       typeof n.pageId === 'string' ? n.pageId : doc.pages[0],
       n as Partial<IrisNode>,
     );

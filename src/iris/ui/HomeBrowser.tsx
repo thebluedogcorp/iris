@@ -63,6 +63,7 @@ import {
 } from '@/components/ui/select';
 import { useIris } from '../engine/store';
 import { openIrisFile } from '../engine/files';
+import { TEMPLATES } from '../engine/templates';
 import { getSession, initialsFor, signOut } from '../auth/session';
 import {
   deleteDocInLibrary,
@@ -296,6 +297,10 @@ export function HomeBrowser() {
     useIris.getState().newDoc();
   }, []);
 
+  const createFromTemplate = useCallback((templateId: string) => {
+    useIris.getState().newDocFromTemplate(templateId);
+  }, []);
+
   const importFile = useCallback(() => {
     openIrisFile();
   }, []);
@@ -512,6 +517,41 @@ export function HomeBrowser() {
                 </div>
               </div>
             </div>
+
+            {/* template picker */}
+            {nav === 'all' && !query.trim() && (
+              <div className="mb-6">
+                <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-[#7A7A7A]">
+                  Start from a template
+                </p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                  <button
+                    type="button"
+                    onClick={createNew}
+                    className="group flex h-20 flex-col items-start justify-between rounded-lg border border-dashed border-[#4E4E4E] p-2.5 text-left transition-colors hover:border-[#8B5CF6] hover:bg-[#2C2C2C]"
+                  >
+                    <Plus className="size-4 text-[#9A9A9A] transition-colors group-hover:text-[#C4B5FD]" aria-hidden />
+                    <span className="text-[12px] font-medium text-[#E5E5E5]">Blank file</span>
+                  </button>
+                  {TEMPLATES.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => createFromTemplate(t.id)}
+                      className="group flex h-20 flex-col items-start justify-between rounded-lg border border-[#3E3E3E] bg-[#262626] p-2.5 text-left transition-colors hover:border-[#8B5CF6] hover:bg-[#2C2C2C]"
+                    >
+                      <span className="flex size-6 items-center justify-center rounded bg-[#8B5CF6]/15 text-[#C4B5FD]">
+                        <TemplateGlyph id={t.id} />
+                      </span>
+                      <span>
+                        <span className="block text-[12px] font-medium text-[#E5E5E5]">{t.name}</span>
+                        <span className="block truncate text-[10px] text-[#8A8A8A]">{t.description}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* content */}
             {entries.length === 0 ? (
@@ -735,6 +775,48 @@ function SidebarItem({
       {label}
     </button>
   );
+}
+
+/** Small line-art glyph for each template card. */
+function TemplateGlyph({ id }: { id: string }) {
+  const cls = 'stroke-current';
+  const common = { fill: 'none', strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  switch (id) {
+    case 'mobile':
+      return (
+        <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+          <rect x="4.5" y="1.5" width="7" height="13" rx="1.5" className={cls} {...common} />
+          <path d="M4.5 12.5h7" className={cls} {...common} />
+        </svg>
+      );
+    case 'desktop':
+      return (
+        <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+          <rect x="1.5" y="2.5" width="13" height="9" rx="1" className={cls} {...common} />
+          <path d="M6 13.5h4M8 11.5v2" className={cls} {...common} />
+        </svg>
+      );
+    case 'kanban':
+      return (
+        <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+          <rect x="1.5" y="2.5" width="3.5" height="11" rx="0.8" className={cls} {...common} />
+          <rect x="6.25" y="2.5" width="3.5" height="8" rx="0.8" className={cls} {...common} />
+          <rect x="11" y="2.5" width="3.5" height="6" rx="0.8" className={cls} {...common} />
+        </svg>
+      );
+    case 'poster':
+      return (
+        <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+          <path d="M8 1.8 9.7 5.3l3.8.5-2.8 2.6.7 3.8L8 10.4l-3.4 1.8.7-3.8L2.5 5.8l3.8-.5z" className={cls} {...common} />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+          <rect x="3" y="3" width="10" height="10" rx="1" className={cls} {...common} />
+        </svg>
+      );
+  }
 }
 
 function EmptyLibrary({ onNew, onImport }: { onNew: () => void; onImport: () => void }) {

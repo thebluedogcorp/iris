@@ -5,9 +5,9 @@
  * inline rename, multi-select and pointer-based drag reordering.
  */
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { ChevronRight, Eye, EyeOff, Lock, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, Copy, Eye, EyeOff, Lock, Plus, Search, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { ID, IrisNode, isContainer, isDescendantOf } from '../engine/model';
 import { useIris } from '../engine/store';
 import { cn } from '@/lib/utils';
@@ -75,6 +75,8 @@ export function LayersPanel() {
       addPage: s.addPage,
       deletePage: s.deletePage,
       renamePage: s.renamePage,
+      duplicatePage: s.duplicatePage,
+      movePage: s.movePage,
       setSelection: s.setSelection,
       toggleSelection: s.toggleSelection,
       updateNodes: s.updateNodes,
@@ -86,10 +88,12 @@ export function LayersPanel() {
   const [collapsed, setCollapsed] = useState<Set<ID>>(new Set());
   const [renaming, setRenaming] = useState<RenameTarget | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [query, setQuery] = useState('');
   const dragRef = useRef<DragState | null>(null);
   const anchorRef = useRef<ID | null>(null);
 
   const page = doc.pagesById[currentPageId];
+  const q = query.trim().toLowerCase();
 
   const toggleCollapsed = (id: ID): void => {
     setCollapsed((prev) => {
@@ -217,7 +221,31 @@ export function LayersPanel() {
 
   /* ---------------------------------------------------------------- */
 
+  /** ids matching the search query (plus their ancestors so the tree stays connected) */
+  const matches = useMemo<Set<ID> | null>(() => {
+    if (!q) return null;
+    const set = new Set<ID>();
+    const visit = (id: ID): boolean => {
+      const n = doc.nodesById[id];
+      if (!n) return false;
+      let any = n.name.toLowerCase().includes(q) || n.type.toLowerCase().includes(q);
+      for (const c of n.children) {
+        if (visit(c)) {
+          any = true;
+          set.add(c);
+        }
+      }
+      if (any) set.add(id);
+      return any;
+    };
+    page?.nodeIds.forEach((id) => {
+      if (visit(id)) set.add(id);
+    });
+    return set;
+  }, [q, doc, page]);
+
   const renderRow = (node: IrisNode, depth: number): React.ReactNode => {
+    if (matches && !matches.has(node.id)) return null;
     const isSel = selection.includes(node.id);
     const container = isContainer(node);
     const expanded = !collapsed.has(node.id);
@@ -335,7 +363,7 @@ export function LayersPanel() {
     return children.map((n) => (
       <div key={n.id}>
         {renderRow(n as IrisNode, depth)}
-        {isContainer(n as IrisNode) && !collapsed.has(n.id) && renderTree(n.id, depth + 1)}
+        {isContainer(n as IrisNode) && (matches ? matches.has(n.id) : !collapsed.has(n.id)) && renderTree(n.id, depth + 1)}
       </div>
     ));
   };
@@ -397,20 +425,60 @@ export function LayersPanel() {
                 ) : (
                   <>
                     <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                    {doc.pages.length > 1 ? (
+                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100">
                       <button
                         type="button"
-                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-[#9A9A9A] opacity-0 hover:bg-[#474747] hover:text-white group-hover:opacity-100"
-                        aria-label={`Delete ${p.name}`}
-                        title="Delete page"
+                        className="flex h-5 w-5 items-center justify-center rounded-sm text-[#9A9A9A] hover:bg-[#474747] hover:text-white"
+                        aria-label={`Move ${p.name} up`}
+                        title="Move page up"
+                        disabled={doc.pages.indexOf(pid) === 0}
                         onClick={(e) => {
                           e.stopPropagation();
-                          actions.deletePage(pid);
+                          actions.movePage(pid, -1);
                         }}
                       >
-                        <Trash2 size={11} strokeWidth={2} aria-hidden />
+                        <ChevronUp size={11} strokeWidth={2} aria-hidden />
                       </button>
-                    ) : null}
+                      <button
+                        type="button"
+                        className="flex h-5 w-5 items-center justify-center rounded-sm text-[#9A9A9A] hover:bg-[#474747] hover:text-white"
+                        aria-label={`Move ${p.name} down`}
+                        title="Move page down"
+                        disabled={doc.pages.indexOf(pid) === doc.pages.length - 1}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          actions.movePage(pid, 1);
+                        }}
+                      >
+                        <ChevronDown size={11} strokeWidth={2} aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        className="flex h-5 w-5 items-center justify-center rounded-sm text-[#9A9A9A] hover:bg-[#474747] hover:text-white"
+                        aria-label={`Duplicate ${p.name}`}
+                        title="Duplicate page"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          actions.duplicatePage(pid);
+                        }}
+                      >
+                        <Copy size={11} strokeWidth={2} aria-hidden />
+                      </button>
+                      {doc.pages.length > 1 ? (
+                        <button
+                          type="button"
+                          className="flex h-5 w-5 items-center justify-center rounded-sm text-[#9A9A9A] hover:bg-[#474747] hover:text-white"
+                          aria-label={`Delete ${p.name}`}
+                          title="Delete page"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            actions.deletePage(pid);
+                          }}
+                        >
+                          <Trash2 size={11} strokeWidth={2} aria-hidden />
+                        </button>
+                      ) : null}
+                    </div>
                   </>
                 )}
               </div>
@@ -420,10 +488,29 @@ export function LayersPanel() {
       </div>
 
       {/* Layers header */}
-      <div className="flex h-9 shrink-0 items-center px-3">
+      <div className="flex h-9 shrink-0 items-center gap-1.5 px-3">
         <span className="iris-section-title text-[10px] uppercase tracking-wider text-[#9A9A9A]">
           Layers
         </span>
+      </div>
+
+      {/* search */}
+      <div className="shrink-0 px-2.5 pb-1.5">
+        <div className="flex h-6 items-center gap-1.5 rounded-md border border-[#3E3E3E] bg-[#242424] px-2 focus-within:border-[#5A5A5A]">
+          <Search size={11} strokeWidth={2} className="shrink-0 text-[#6F6F6F]" aria-hidden />
+          <input
+            className="h-full min-w-0 flex-1 bg-transparent text-[11px] text-white outline-none placeholder:text-[#6F6F6F]"
+            placeholder="Search layers…"
+            aria-label="Search layers"
+            value={query}
+            spellCheck={false}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Escape') setQuery('');
+            }}
+          />
+        </div>
       </div>
 
       {/* Tree */}
@@ -432,9 +519,7 @@ export function LayersPanel() {
           renderTree(null, 0)
         ) : (
           <p className="px-4 py-8 text-center text-[11px] leading-5 text-[#6F6F6F]">
-            No objects yet
-            <br />
-            Draw on the canvas or press R
+            {q ? `Nothing matches “${query}”` : <>No objects yet<br />Draw on the canvas or press R</>}
           </p>
         )}
       </div>

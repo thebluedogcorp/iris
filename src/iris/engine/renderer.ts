@@ -1,22 +1,35 @@
 /**
  * Iris canvas renderer: scene draw pass + selection overlay + snap guides +
- * rulers + pixel grid. Framework-agnostic; redraws are scheduled via
- * requestDraw() from store subscriptions and tool interactions.
+ * rulers + pixel grid + layout grid + ruler guides.
+ *
+ * Scene pass note: drawNode() applies each node's LOCAL matrix on top of the
+ * parent's already-applied world matrix — this is what makes content inside
+ * frames/groups render in the right place (applying full world matrices
+ * recursively would double-transform nested content).
  */
 
 import { ID, IrisDoc, IrisNode } from './model';
 import {
-  Rect,
+  IDENTITY,
+  Mat,
   RULER,
+  Rect,
   Vec,
+  arrowPath2d,
+  applyTextCase,
   boundsOfNodes,
+  dashArray,
   firstBaseline,
   fontString,
+  gradientLine,
   mApply,
+  mMul,
   measureText,
+  nodeLocalMatrix,
   nodeWorldAABB,
   nodeWorldMatrix,
   path2dForPoints,
+  regularPath2d,
   screenToWorld,
   selectionHandleGeometry,
   visibleWorldRect,
@@ -29,14 +42,17 @@ import { getImage, onImageCacheChange } from './imageCache';
 export const ACCENT = '#8B5CF6';
 export const ACCENT_LIGHT = '#C4B5FD';
 const SNAP = '#FF3B30';
-const CANVAS_BG = '#242424';
+const DEFAULT_CANVAS_BG = '#242424';
 const RULER_BG = '#1E1E1E';
 const RULER_BORDER = '#3E3E3E';
 const RULER_TEXT = '#7A7A7A';
+const GUIDE_COLOR = '#F26BFF';
 
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 let raf = 0;
+/** set during the scene pass: render shapes as outlines (wireframe view) */
+let outlineMode = false;
 
 export function requestDraw(): void {
   if (raf) return;
@@ -87,6 +103,23 @@ export function initRenderer(c: HTMLCanvasElement): () => void {
   };
 }
 
+/** Sample the rendered pixel color under a client-space point (eyedropper). */
+export function samplePixel(clientX: number, clientY: number): string | null {
+  if (!canvas || !ctx) return null;
+  const r = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const x = Math.round((clientX - r.left) * dpr);
+  const y = Math.round((clientY - r.top) * dpr);
+  if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return null;
+  try {
+    const d = ctx.getImageData(x, y, 1, 1).data;
+    const hex = (v: number) => v.toString(16).padStart(2, '0');
+    return `#${hex(d[0])}${hex(d[1])}${hex(d[2])}`.toUpperCase();
+  } catch {
+    return null;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Scene pass (shared with PNG export)                                 */
 /* ------------------------------------------------------------------ */
@@ -106,11 +139,73 @@ function roundRectPath(c: CanvasRenderingContext2D, x: number, y: number, w: num
   c.closePath();
 }
 
-/** Draw a set of nodes (world transform assumed applied on ctx). */
+/** Current uniform-ish scale of the ctx transform (for hairline widths). */
+function ctxScale(c: CanvasRenderingContext2D): number {
+  try {
+    const t = c.getTransform();
+    const det = t.a * t.d - t.b * t.c;
+    return Math.sqrt(Math.abs(det)) || 1;
+  } catch {
+    return 1;
+  }
+}
+
+/** Resolve a node's paint: solid color or gradient object. */
+function paintOf(c: CanvasRenderingContext2D, n: IrisNode): string | CanvasGradient | null {
+  if (n.fillGradient) {
+    const g = n.fillGradient;
+    let grad: CanvasGradient;
+    if (g.type === 'radial') {
+      const r = Math.max(n.w, n.h) / 2;
+      grad = c.createRadialGradient(n.w / 2, n.h / 2, 0, n.w / 2, n.h / 2, Math.max(r, 0.01));
+    } else {
+      const l = gradientLine(n.w, n.h, g.angle);
+      grad = c.createLinearGradient(l.x1, l.y1, l.x2, l.y2);
+    }
+    grad.addColorStop(0, g.from);
+    grad.addColorStop(1, g.to);
+    return grad;
+  }
+  return n.fill;
+}
+
+interface PaintOpts {
+  /** skip fills (outline view) */
+  noFill?: boolean;
+}
+
+/** Shared fill+stroke painting for closed shapes given a prepared path. */
+function paintPath(
+  c: CanvasRenderingContext2D,
+  n: IrisNode,
+  path: Path2D,
+  opts: PaintOpts = {},
+): void {
+  const fill = outlineMode && !opts.noFill ? null : paintOf(c, n);
+  if (fill) {
+    c.fillStyle = fill;
+    c.fill(path);
+  }
+  if (n.stroke && n.strokeWidth > 0) {
+    c.strokeStyle = n.stroke;
+    c.lineWidth = n.strokeWidth;
+    const dash = dashArray(n.dash, n.strokeWidth);
+    if (dash.length) c.setLineDash(dash);
+    c.stroke(path);
+    if (dash.length) c.setLineDash([]);
+  } else if (outlineMode && !fill) {
+    /* outline mode with no paint at all: show a hairline */
+    c.strokeStyle = 'rgba(255,255,255,0.45)';
+    c.lineWidth = 1 / ctxScale(c);
+    c.stroke(path);
+  }
+}
+
+/** Draw a set of nodes (ctx is expected to be in the PARENT-of-roots space). */
 export function drawNodes(
   c: CanvasRenderingContext2D,
   doc: IrisDoc,
-  pageId: ID,
+  pageId: IrisDoc['pages'][number],
   alpha: number,
   ids?: ID[],
 ): void {
@@ -119,31 +214,64 @@ export function drawNodes(
   const targets: IrisNode[] = ids
     ? ids.map((id) => doc.nodesById[id]).filter((n): n is IrisNode => !!n && n.visible)
     : page.nodeIds.map((id) => doc.nodesById[id]).filter((n): n is IrisNode => !!n && n.visible);
-  for (const n of targets) drawNode(c, doc, n, alpha);
+  for (const n of targets) drawNode(c, doc, n, alpha, IDENTITY);
 }
 
-function drawNode(c: CanvasRenderingContext2D, doc: IrisDoc, n: IrisNode, alpha: number): void {
+function drawNode(
+  c: CanvasRenderingContext2D,
+  doc: IrisDoc,
+  n: IrisNode,
+  alpha: number,
+  parentWorld: Mat,
+): void {
   if (!n.visible) return;
   const ga = alpha * n.opacity;
-  const m = nodeWorldMatrix(doc, n);
+  const local = nodeLocalMatrix(n);
+  const world = mMul(parentWorld, local);
   c.save();
-  c.transform(m.a, m.b, m.c, m.d, m.e, m.f);
+  c.transform(local.a, local.b, local.c, local.d, local.e, local.f);
   c.globalAlpha = ga;
+  if (n.blend && n.blend !== 'normal') c.globalCompositeOperation = n.blend;
+  if (n.blur > 0) {
+    try {
+      c.filter = `blur(${n.blur}px)`;
+    } catch {
+      /* canvas filters unsupported */
+    }
+  }
+
+  const applyShadow = (): void => {
+    if (n.shadow) {
+      c.shadowColor = n.shadow.color;
+      c.shadowOffsetX = n.shadow.x;
+      c.shadowOffsetY = n.shadow.y;
+      c.shadowBlur = n.shadow.blur;
+    }
+  };
+  const clearShadow = (): void => {
+    c.shadowColor = 'transparent';
+    c.shadowBlur = 0;
+    c.shadowOffsetX = 0;
+    c.shadowOffsetY = 0;
+  };
 
   if (n.type === 'group') {
     for (const childId of n.children) {
       const child = doc.nodesById[childId];
-      if (child) drawNode(c, doc, child, ga);
+      if (child) drawNode(c, doc, child, ga, world);
     }
     c.restore();
     return;
   }
 
   if (n.type === 'frame') {
-    if (n.fill) {
+    const framePaint = paintOf(c, n);
+    if (framePaint && !outlineMode) {
       roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
-      c.fillStyle = n.fill;
+      applyShadow();
+      c.fillStyle = framePaint;
       c.fill();
+      clearShadow();
     }
     if (n.clip) {
       roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
@@ -151,13 +279,16 @@ function drawNode(c: CanvasRenderingContext2D, doc: IrisDoc, n: IrisNode, alpha:
     }
     for (const childId of n.children) {
       const child = doc.nodesById[childId];
-      if (child) drawNode(c, doc, child, ga);
+      if (child) drawNode(c, doc, child, ga, world);
     }
     if (n.stroke && n.strokeWidth > 0) {
       roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
       c.strokeStyle = n.stroke;
       c.lineWidth = n.strokeWidth;
+      const dash = dashArray(n.dash, n.strokeWidth);
+      if (dash.length) c.setLineDash(dash);
       c.stroke();
+      if (dash.length) c.setLineDash([]);
     }
     c.restore();
     return;
@@ -165,62 +296,85 @@ function drawNode(c: CanvasRenderingContext2D, doc: IrisDoc, n: IrisNode, alpha:
 
   switch (n.type) {
     case 'rect': {
-      roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
-      if (n.fill) {
-        c.fillStyle = n.fill;
-        c.fill();
+      const p = new Path2D();
+      const rr = Math.max(0, Math.min(n.cornerRadius, n.w / 2, n.h / 2));
+      if (rr <= 0) p.rect(0, 0, n.w, n.h);
+      else {
+        p.moveTo(rr, 0);
+        p.arcTo(n.w, 0, n.w, n.h, rr);
+        p.arcTo(n.w, n.h, 0, n.h, rr);
+        p.arcTo(0, n.h, 0, 0, rr);
+        p.arcTo(0, 0, n.w, 0, rr);
+        p.closePath();
       }
-      if (n.stroke && n.strokeWidth > 0) {
-        c.strokeStyle = n.stroke;
-        c.lineWidth = n.strokeWidth;
-        c.stroke();
-      }
+      applyShadow();
+      paintPath(c, n, p);
+      clearShadow();
       break;
     }
     case 'ellipse': {
-      c.beginPath();
-      c.ellipse(n.w / 2, n.h / 2, Math.abs(n.w / 2), Math.abs(n.h / 2), 0, 0, Math.PI * 2);
-      if (n.fill) {
-        c.fillStyle = n.fill;
-        c.fill();
-      }
-      if (n.stroke && n.strokeWidth > 0) {
-        c.strokeStyle = n.stroke;
-        c.lineWidth = n.strokeWidth;
-        c.stroke();
-      }
+      const p = new Path2D();
+      p.ellipse(n.w / 2, n.h / 2, Math.abs(n.w / 2), Math.abs(n.h / 2), 0, 0, Math.PI * 2);
+      applyShadow();
+      paintPath(c, n, p);
+      clearShadow();
+      break;
+    }
+    case 'polygon':
+    case 'star': {
+      const p = regularPath2d(n);
+      applyShadow();
+      paintPath(c, n, p);
+      clearShadow();
       break;
     }
     case 'line': {
-      c.beginPath();
+      const p = new Path2D();
       if (n.flip) {
-        c.moveTo(n.w, 0);
-        c.lineTo(0, n.h);
+        p.moveTo(n.w, 0);
+        p.lineTo(0, n.h);
       } else {
-        c.moveTo(0, 0);
-        c.lineTo(n.w, n.h);
+        p.moveTo(0, 0);
+        p.lineTo(n.w, n.h);
       }
       c.strokeStyle = n.stroke ?? '#000000';
       c.lineWidth = Math.max(n.strokeWidth, 0.5);
-      c.stroke();
+      const dash = dashArray(n.dash, n.strokeWidth);
+      if (dash.length) c.setLineDash(dash);
+      c.stroke(p);
+      if (dash.length) c.setLineDash([]);
+      break;
+    }
+    case 'arrow': {
+      const { shaft, heads } = arrowPath2d(n);
+      c.strokeStyle = n.stroke ?? '#000000';
+      c.lineWidth = Math.max(n.strokeWidth, 0.5);
+      const dash = dashArray(n.dash, n.strokeWidth);
+      if (dash.length) c.setLineDash(dash);
+      c.stroke(shaft);
+      if (dash.length) c.setLineDash([]);
+      for (const head of heads) {
+        c.fillStyle = n.stroke ?? '#000000';
+        c.fill(head);
+        c.stroke(head);
+      }
       break;
     }
     case 'path': {
       const p = path2dForPoints(n.points, n.closed);
-      if (n.fill) {
-        c.fillStyle = n.fill;
-        c.fill(p);
-      }
-      if (n.stroke && n.strokeWidth > 0) {
-        c.strokeStyle = n.stroke;
-        c.lineWidth = n.strokeWidth;
-        c.stroke(p);
-      }
+      applyShadow();
+      paintPath(c, n, p);
+      clearShadow();
       break;
     }
     case 'text': {
       const tm = textMetrics(n);
       c.font = fontString(n);
+      try {
+        (c as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${n.letterSpacing ?? 0}px`;
+      } catch {
+        /* not supported */
+      }
       c.fillStyle = n.fill ?? '#000000';
       c.textBaseline = 'alphabetic';
       c.textAlign = n.textAlign === 'center' ? 'center' : n.textAlign === 'right' ? 'right' : 'left';
@@ -229,16 +383,38 @@ function drawNode(c: CanvasRenderingContext2D, doc: IrisDoc, n: IrisNode, alpha:
       const lineH = n.fontSize * n.lineHeight;
       tm.lines.forEach((line, i) => {
         c.fillText(line, x, base + i * lineH);
+        const width = c.measureText(line).width;
+        const x0 = n.textAlign === 'center' ? x - width / 2 : n.textAlign === 'right' ? x - width : x;
+        const y = base + i * lineH;
+        if (n.underline) {
+          c.fillRect(x0, y + n.fontSize * 0.08, width, Math.max(1, n.fontSize * 0.06));
+        }
+        if (n.strike) {
+          c.fillRect(x0, y - n.fontSize * 0.32, width, Math.max(1, n.fontSize * 0.06));
+        }
       });
+      try {
+        (c as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = '0px';
+      } catch {
+        /* ignore */
+      }
       break;
     }
     case 'image': {
       const img = n.src ? getImage(n.src) : null;
-      if (img) {
-        c.drawImage(img, 0, 0, n.w, n.h);
+      if (img && !outlineMode) {
+        if (n.cornerRadius > 0) {
+          roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
+          c.save();
+          c.clip();
+          c.drawImage(img, 0, 0, n.w, n.h);
+          c.restore();
+        } else {
+          c.drawImage(img, 0, 0, n.w, n.h);
+        }
       } else {
         c.strokeStyle = 'rgba(255,255,255,0.28)';
-        c.lineWidth = 1 / useIris.getState().viewport.zoom;
+        c.lineWidth = 1 / ctxScale(c);
         c.setLineDash([6 * c.lineWidth, 4 * c.lineWidth]);
         c.strokeRect(0, 0, n.w, n.h);
         c.setLineDash([]);
@@ -256,10 +432,15 @@ function drawNode(c: CanvasRenderingContext2D, doc: IrisDoc, n: IrisNode, alpha:
   c.restore();
 }
 
+/** Draw a text node's lines with a custom transform (used by guides badge etc.). */
+export function applyTextTransform(text: string, textCase: IrisNode['textCase']): string {
+  return applyTextCase(text, textCase);
+}
+
 /* text metrics cache keyed by node identity */
 const textCache = new WeakMap<
   IrisNode,
-  { text: string; w: number; auto: boolean; family: string; size: number; metrics: ReturnType<typeof measureText> }
+  { text: string; w: number; auto: boolean; family: string; size: number; spacing: number; tcase: string; metrics: ReturnType<typeof measureText> }
 >();
 
 function textMetrics(n: IrisNode): ReturnType<typeof measureText> {
@@ -270,7 +451,9 @@ function textMetrics(n: IrisNode): ReturnType<typeof measureText> {
     cached.w === n.w &&
     cached.auto === n.autoWidth &&
     cached.family === n.fontFamily &&
-    cached.size === n.fontSize
+    cached.size === n.fontSize &&
+    cached.spacing === n.letterSpacing &&
+    cached.tcase === n.textCase
   ) {
     return cached.metrics;
   }
@@ -281,6 +464,8 @@ function textMetrics(n: IrisNode): ReturnType<typeof measureText> {
     auto: n.autoWidth,
     family: n.fontFamily,
     size: n.fontSize,
+    spacing: n.letterSpacing,
+    tcase: n.textCase,
     metrics,
   });
   return metrics;
@@ -301,9 +486,12 @@ function draw(): void {
   const ox = s.viewFlags.rulers ? RULER : 0;
   const oy = s.viewFlags.rulers ? RULER : 0;
 
+  outlineMode = !!s.viewFlags.outline;
+
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.clearRect(0, 0, W, H);
-  c.fillStyle = CANVAS_BG;
+  const bg = /^#[0-9a-fA-F]{3,8}$/.test(s.doc.settings?.bg ?? '') ? s.doc.settings.bg : DEFAULT_CANVAS_BG;
+  c.fillStyle = bg;
   c.fillRect(0, 0, W, H);
 
   // world layer
@@ -325,6 +513,26 @@ function draw(): void {
       c.lineTo(sx, H);
     }
     for (let y = Math.ceil(view.y); y <= view.y + view.h; y++) {
+      const sy = Math.round(y * vp.zoom + vp.y + oy) + 0.5;
+      c.moveTo(ox, sy);
+      c.lineTo(W, sy);
+    }
+    c.stroke();
+  }
+
+  // layout grid
+  const grid = s.doc.settings?.grid;
+  if (grid?.show && grid.size >= 1 && vp.zoom * grid.size >= 4) {
+    const view = visibleWorldRect(vp, W, H, ox, oy);
+    c.strokeStyle = 'rgba(255,255,255,0.07)';
+    c.lineWidth = 1;
+    c.beginPath();
+    for (let x = Math.ceil(view.x / grid.size) * grid.size; x <= view.x + view.w; x += grid.size) {
+      const sx = Math.round(x * vp.zoom + vp.x + ox) + 0.5;
+      c.moveTo(sx, oy);
+      c.lineTo(sx, H);
+    }
+    for (let y = Math.ceil(view.y / grid.size) * grid.size; y <= view.y + view.h; y += grid.size) {
       const sy = Math.round(y * vp.zoom + vp.y + oy) + 0.5;
       c.moveTo(ox, sy);
       c.lineTo(W, sy);
@@ -360,9 +568,51 @@ function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.g
     c.fillText('Nothing here yet', W / 2, H / 2 - 16);
     c.font = '12px Inter, system-ui, sans-serif';
     c.fillStyle = '#4E4E4E';
-    c.fillText('Press F for a frame · R rectangle · O ellipse · T text · P pen', W / 2, H / 2 + 8);
+    c.fillText(
+      'Press F for a frame · R rectangle · O ellipse · Y polygon · S star · T text · P pen',
+      W / 2,
+      H / 2 + 8,
+    );
     c.textAlign = 'left';
     c.textBaseline = 'alphabetic';
+  }
+
+  // ruler guides
+  const guides = doc.settings ?? { guidesX: [], guidesY: [] };
+  if (guides.guidesX?.length || guides.guidesY?.length) {
+    c.strokeStyle = GUIDE_COLOR;
+    c.lineWidth = 1;
+    c.setLineDash([]);
+    for (const gx of guides.guidesX ?? []) {
+      const x = Math.round(gx * vp.zoom + vp.x) + 0.5;
+      c.beginPath();
+      c.moveTo(x, 0);
+      c.lineTo(x, H);
+      c.stroke();
+    }
+    for (const gy of guides.guidesY ?? []) {
+      const y = Math.round(gy * vp.zoom + vp.y) + 0.5;
+      c.beginPath();
+      c.moveTo(0, y);
+      c.lineTo(W, y);
+      c.stroke();
+    }
+  }
+  // guide drag preview
+  if (overlay.guideDrag) {
+    c.strokeStyle = GUIDE_COLOR;
+    c.lineWidth = 1;
+    c.beginPath();
+    if (overlay.guideDrag.axis === 'x') {
+      const x = Math.round(overlay.guideDrag.at * vp.zoom + vp.x) + 0.5;
+      c.moveTo(x, 0);
+      c.lineTo(x, H);
+    } else {
+      const y = Math.round(overlay.guideDrag.at * vp.zoom + vp.y) + 0.5;
+      c.moveTo(0, y);
+      c.lineTo(W, y);
+    }
+    c.stroke();
   }
 
   // hover outline
@@ -523,7 +773,7 @@ function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.g
     const h = Math.abs(p2.y - p1.y);
     c.strokeStyle = ACCENT;
     c.lineWidth = 1;
-    if (dp.type === 'line' && dp.diagonal) {
+    if ((dp.type === 'line' || dp.type === 'arrow') && dp.diagonal) {
       const a = toScreen({ x: dp.diagonal.x1, y: dp.diagonal.y1 });
       const b = toScreen({ x: dp.diagonal.x2, y: dp.diagonal.y2 });
       c.beginPath();
@@ -542,6 +792,21 @@ function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.g
       c.setLineDash([4, 3]);
       c.strokeRect(x, y, Math.max(w, 2), Math.max(h, 16));
       c.setLineDash([]);
+    } else if (dp.type === 'star' || dp.type === 'polygon') {
+      c.beginPath();
+      const k = dp.type === 'star' ? 10 : 6;
+      const rx = w / 2;
+      const ry = h / 2;
+      for (let i = 0; i < k; i++) {
+        const r = dp.type === 'star' && i % 2 === 1 ? 0.45 : 1;
+        const a = -Math.PI / 2 + (i * Math.PI) / (k / 2);
+        const px = x + rx + rx * r * Math.cos(a);
+        const py = y + ry + ry * r * Math.sin(a);
+        if (i === 0) c.moveTo(px, py);
+        else c.lineTo(px, py);
+      }
+      c.closePath();
+      c.stroke();
     } else {
       c.strokeRect(x, y, w, h);
     }
@@ -559,6 +824,24 @@ function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.g
     c.strokeStyle = ACCENT;
     c.lineWidth = 1;
     c.strokeRect(x, y, Math.abs(p2.x - p1.x), Math.abs(p2.y - p1.y));
+  }
+
+  // eyedropper magnifier
+  if (s.tool === 'eyedropper' && overlay.pointerWorld) {
+    const p = toScreen(overlay.pointerWorld);
+    c.strokeStyle = ACCENT;
+    c.lineWidth = 1;
+    roundRectPath(c, p.x + 12, p.y - 16, 64, 22, 4);
+    c.fillStyle = '#1E1E1E';
+    c.fill();
+    c.stroke();
+    c.fillStyle = overlay.pickedColor ?? '#FFFFFF';
+    c.fillRect(p.x + 16, p.y - 12, 14, 14);
+    c.fillStyle = '#FFFFFF';
+    c.font = '600 10px Inter, system-ui, sans-serif';
+    c.textBaseline = 'middle';
+    c.fillText(overlay.pickedColor ?? '#—', p.x + 34, p.y - 5);
+    c.textBaseline = 'alphabetic';
   }
 
   // pen draft
@@ -726,6 +1009,30 @@ function drawRulers(
       c.fillStyle = 'rgba(139,92,246,0.35)';
       c.fillRect(sx1, RULER - 3, sx2 - sx1, 3);
       c.fillRect(RULER - 3, sy1, 3, sy2 - sy1);
+    }
+  }
+
+  // guide markers on rulers
+  const guides = s.doc.settings;
+  if (guides) {
+    c.fillStyle = GUIDE_COLOR;
+    for (const gx of guides.guidesX ?? []) {
+      const px = Math.round(gx * vp.zoom + vp.x + ox) + 0.5;
+      c.beginPath();
+      c.moveTo(px, RULER - 8);
+      c.lineTo(px - 4, RULER - 1);
+      c.lineTo(px + 4, RULER - 1);
+      c.closePath();
+      c.fill();
+    }
+    for (const gy of guides.guidesY ?? []) {
+      const py = Math.round(gy * vp.zoom + vp.y + oy) + 0.5;
+      c.beginPath();
+      c.moveTo(RULER - 8, py);
+      c.lineTo(RULER - 1, py - 4);
+      c.lineTo(RULER - 1, py + 4);
+      c.closePath();
+      c.fill();
     }
   }
 

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Floating horizontal toolbar: shape tools, image import, hand tool.
+ * Floating horizontal toolbar: shape tools, image import, hand + eyedropper.
  * Positioning is handled by the parent — this is just the bar itself.
  */
 
@@ -9,11 +9,16 @@ import {
   Circle,
   Frame,
   Hand,
+  Hexagon,
   ImagePlus,
+  Images,
   MousePointer2,
+  MoveUpRight,
+  Pipette,
   PenTool,
   Slash,
   Square,
+  Star,
   Type,
   type LucideIcon,
 } from 'lucide-react';
@@ -32,9 +37,14 @@ const TOOLS: ToolDef[] = [
   { tool: 'frame', label: 'Frame', key: 'F', Icon: Frame },
   { tool: 'rect', label: 'Rect', key: 'R', Icon: Square },
   { tool: 'ellipse', label: 'Ellipse', key: 'O', Icon: Circle },
+  { tool: 'polygon', label: 'Polygon', key: 'Y', Icon: Hexagon },
+  { tool: 'star', label: 'Star', key: 'S', Icon: Star },
   { tool: 'line', label: 'Line', key: 'L', Icon: Slash },
+  { tool: 'arrow', label: 'Arrow', key: 'A', Icon: MoveUpRight },
   { tool: 'pen', label: 'Pen', key: 'P', Icon: PenTool },
   { tool: 'text', label: 'Text', key: 'T', Icon: Type },
+  { tool: 'image', label: 'Place image', key: 'M', Icon: Images },
+  { tool: 'eyedropper', label: 'Eyedropper', key: 'I', Icon: Pipette },
 ];
 
 export function Toolbar() {

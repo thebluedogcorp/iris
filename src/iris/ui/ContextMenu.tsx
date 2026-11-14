@@ -11,7 +11,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useIris } from '../engine/store';
 
 const MENU_WIDTH = 200;
-const MENU_MAX_HEIGHT = 320;
+const MENU_MAX_HEIGHT = 420;
 
 interface CtxAction {
   label: string;
@@ -65,6 +65,14 @@ export function ContextMenu() {
       ungroupSelection: s.ungroupSelection,
       zorder: s.zorder,
       selectAll: s.selectAll,
+      selectSameType: s.selectSameType,
+      flipSelection: s.flipSelection,
+      rotateSelectionBy: s.rotateSelectionBy,
+      toggleLockSelection: s.toggleLockSelection,
+      toggleHideSelection: s.toggleHideSelection,
+      copyStyle: s.copyStyle,
+      pasteStyle: s.pasteStyle,
+      hasStyleClipboard: !!s.styleClipboard,
     })),
   );
 
@@ -110,13 +118,24 @@ export function ContextMenu() {
         { label: 'Duplicate', shortcut: 'Ctrl+D', run: () => actions.duplicateSelection() },
         { label: 'Delete', shortcut: 'Del', run: actions.deleteSelection },
         { sep: true },
+        { label: 'Copy Style', shortcut: 'Ctrl+Alt+C', run: actions.copyStyle },
+        { label: 'Paste Style', shortcut: 'Ctrl+Alt+V', disabled: !actions.hasStyleClipboard, run: actions.pasteStyle },
+        { sep: true },
         { label: 'Group', shortcut: 'Ctrl+G', run: actions.groupSelection },
         { label: 'Ungroup', shortcut: 'Ctrl+Shift+G', run: actions.ungroupSelection },
+        { sep: true },
+        { label: 'Flip Horizontal', shortcut: 'Shift+H', run: () => actions.flipSelection('h') },
+        { label: 'Flip Vertical', shortcut: 'Shift+V', run: () => actions.flipSelection('v') },
+        { label: 'Rotate 90° CW', run: () => actions.rotateSelectionBy(90) },
+        { label: 'Rotate 90° CCW', run: () => actions.rotateSelectionBy(-90) },
         { sep: true },
         { label: 'Bring Forward', shortcut: ']', run: () => actions.zorder('forward') },
         { label: 'Send Backward', shortcut: '[', run: () => actions.zorder('backward') },
         { label: 'Bring to Front', shortcut: 'Ctrl+]', run: () => actions.zorder('front') },
         { label: 'Send to Back', shortcut: 'Ctrl+[', run: () => actions.zorder('back') },
+        { sep: true },
+        { label: 'Lock / Unlock', shortcut: 'Ctrl+L', run: actions.toggleLockSelection },
+        { label: 'Hide / Show', shortcut: 'Ctrl+Shift+H', run: actions.toggleHideSelection },
       ]
     : [
         { label: 'Paste Here', disabled: !hasClipboard, run: pasteHere },

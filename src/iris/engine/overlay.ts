@@ -26,6 +26,16 @@ export interface DrawPreview {
   diagonal: { x1: number; y1: number; x2: number; y2: number } | null;
 }
 
+export interface GuideDrag {
+  axis: 'x' | 'y';
+  /** world coordinate */
+  at: number;
+  /** index in doc.settings.guidesX/Y (-1 while pulling a new guide) */
+  index: number;
+  /** pointer left the ruler area → live */
+  entered: boolean;
+}
+
 export interface OverlayState {
   marquee: Rect | null;
   guides: SnapGuide[];
@@ -37,6 +47,10 @@ export interface OverlayState {
   pointerWorld: { x: number; y: number } | null;
   spaceDown: boolean;
   rendering: boolean;
+  /** active ruler-guide drag */
+  guideDrag: GuideDrag | null;
+  /** last color sampled by the eyedropper */
+  pickedColor: string | null;
 }
 
 export const overlay: OverlayState = {
@@ -50,10 +64,13 @@ export const overlay: OverlayState = {
   pointerWorld: null,
   spaceDown: false,
   rendering: false,
+  guideDrag: null,
+  pickedColor: null,
 };
 
 export function clearTransient(): void {
   overlay.marquee = null;
   overlay.guides = [];
   overlay.dragBadge = null;
+  overlay.guideDrag = null;
 }

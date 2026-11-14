@@ -4,10 +4,13 @@ import {
   Circle,
   Frame,
   Group,
+  Hexagon,
   Image as ImageIcon,
+  MoveUpRight,
   PenTool,
   Slash,
   Square,
+  Star as StarIcon,
   Type,
   type LucideIcon,
 } from 'lucide-react';
@@ -22,6 +25,9 @@ const ICONS: Record<NodeType, LucideIcon> = {
   path: PenTool,
   text: Type,
   image: ImageIcon,
+  polygon: Hexagon,
+  star: StarIcon,
+  arrow: MoveUpRight,
 };
 
 export function NodeTypeIcon({

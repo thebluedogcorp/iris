@@ -19,7 +19,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useIris } from '../engine/store';
-import { clearRecents, getRecents, openIrisFile, saveIrisFile, type RecentDoc } from '../engine/files';
+import { clearRecents, getRecents, openIrisFile, pickImageFiles, saveIrisFile, type RecentDoc } from '../engine/files';
+import { screenToWorld } from '../engine/geometry';
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
@@ -147,6 +148,12 @@ export function TitleBar() {
   const hasClipboard = useIris((s) => !!s.clipboard);
   const rulers = useIris((s) => s.viewFlags.rulers);
   const pixelGrid = useIris((s) => s.viewFlags.pixelGrid);
+  const outline = useIris((s) => s.viewFlags.outline);
+  const gridShow = useIris((s) => s.doc.settings.grid.show);
+  const gridSnap = useIris((s) => s.doc.settings.grid.snap);
+  const guideCount = useIris(
+    (s) => s.doc.settings.guidesX.length + s.doc.settings.guidesY.length,
+  );
 
   const actions = useIris(
     useShallow((s) => ({
@@ -169,9 +176,23 @@ export function TitleBar() {
       duplicateSelection: s.duplicateSelection,
       deleteSelection: s.deleteSelection,
       selectAll: s.selectAll,
+      selectSameType: s.selectSameType,
       groupSelection: s.groupSelection,
       ungroupSelection: s.ungroupSelection,
       zorder: s.zorder,
+      flipSelection: s.flipSelection,
+      rotateSelectionBy: s.rotateSelectionBy,
+      toggleLockSelection: s.toggleLockSelection,
+      unlockAllOnPage: s.unlockAllOnPage,
+      toggleHideSelection: s.toggleHideSelection,
+      copyStyle: s.copyStyle,
+      pasteStyle: s.pasteStyle,
+      hasStyleClipboard: !!s.styleClipboard,
+      addNode: s.addNode,
+      setGridSettings: s.setGridSettings,
+      clearGuides: s.clearGuides,
+      viewport: s.viewport,
+      canvasSize: s.canvasSize,
     })),
   );
 
@@ -187,6 +208,18 @@ export function TitleBar() {
     const trimmed = nameDraft.trim();
     if (trimmed && trimmed !== docName) actions.setDocName(trimmed);
     else setNameDraft(docName);
+  };
+
+  /** insert a centered frame of a preset size */
+  const insertFrame = (w: number, h: number, name: string): void => {
+    const { viewport, canvasSize } = actions;
+    const center = screenToWorld(viewport, Math.max(0, canvasSize.w / 2 - 10), Math.max(0, canvasSize.h / 2 - 10));
+    actions.addNode('frame', { x: center.x - w / 2, y: center.y - h / 2, w, h, name }, null);
+  };
+
+  const toggleFullscreen = (): void => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen().catch(() => undefined);
   };
 
   return (
@@ -260,6 +293,27 @@ export function TitleBar() {
           </DropdownMenuSub>
         </TopMenu>
 
+        <TopMenu label="Insert">
+          <MenuEntry label="Frame" shortcut="F" action={() => useIris.getState().setTool('frame')} />
+          <MenuEntry label="Rectangle" shortcut="R" action={() => useIris.getState().setTool('rect')} />
+          <MenuEntry label="Ellipse" shortcut="O" action={() => useIris.getState().setTool('ellipse')} />
+          <MenuEntry label="Polygon" shortcut="Y" action={() => useIris.getState().setTool('polygon')} />
+          <MenuEntry label="Star" shortcut="S" action={() => useIris.getState().setTool('star')} />
+          <MenuEntry label="Arrow" shortcut="A" action={() => useIris.getState().setTool('arrow')} />
+          <MenuEntry label="Text" shortcut="T" action={() => useIris.getState().setTool('text')} />
+          <MenuEntry label="Image…" shortcut="M" action={() => pickImageFiles()} />
+          <DropdownMenuSeparator className={SEP_CLS} />
+          <DropdownMenuItem className="text-[11px] text-[#8B8B8B]" disabled>
+            Frame presets
+          </DropdownMenuItem>
+          <MenuEntry label="Phone — 390×844" action={() => insertFrame(390, 844, 'Phone')} />
+          <MenuEntry label="Tablet — 820×1180" action={() => insertFrame(820, 1180, 'Tablet')} />
+          <MenuEntry label="Desktop — 1440×900" action={() => insertFrame(1440, 900, 'Desktop')} />
+          <MenuEntry label="Watch — 198×242" action={() => insertFrame(198, 242, 'Watch')} />
+          <MenuEntry label="Story — 1080×1920" action={() => insertFrame(1080, 1920, 'Story')} />
+          <MenuEntry label="A4 — 794×1123" action={() => insertFrame(794, 1123, 'A4')} />
+        </TopMenu>
+
         <TopMenu label="Edit">
           <MenuEntry label="Undo" shortcut="Ctrl+Z" disabled={!canUndo} action={actions.undo} />
           <MenuEntry label="Redo" shortcut="Ctrl+Shift+Z" disabled={!canRedo} action={actions.redo} />
@@ -276,6 +330,29 @@ export function TitleBar() {
           <MenuEntry label="Delete" disabled={!hasSelection} action={actions.deleteSelection} />
           <DropdownMenuSeparator className={SEP_CLS} />
           <MenuEntry label="Select All" shortcut="Ctrl+A" action={actions.selectAll} />
+          <MenuEntry
+            label="Select Same Type"
+            shortcut="Ctrl+Shift+A"
+            disabled={!hasSelection}
+            action={actions.selectSameType}
+          />
+          <DropdownMenuSeparator className={SEP_CLS} />
+          <MenuEntry label="Copy Style" shortcut="Ctrl+Alt+C" disabled={!hasSelection} action={actions.copyStyle} />
+          <MenuEntry
+            label="Paste Style"
+            shortcut="Ctrl+Alt+V"
+            disabled={!hasSelection || !actions.hasStyleClipboard}
+            action={actions.pasteStyle}
+          />
+          <DropdownMenuSeparator className={SEP_CLS} />
+          <MenuEntry label="Flip Horizontal" shortcut="Shift+H" disabled={!hasSelection} action={() => actions.flipSelection('h')} />
+          <MenuEntry label="Flip Vertical" shortcut="Shift+V" disabled={!hasSelection} action={() => actions.flipSelection('v')} />
+          <MenuEntry label="Rotate 90° CW" disabled={!hasSelection} action={() => actions.rotateSelectionBy(90)} />
+          <MenuEntry label="Rotate 90° CCW" disabled={!hasSelection} action={() => actions.rotateSelectionBy(-90)} />
+          <DropdownMenuSeparator className={SEP_CLS} />
+          <MenuEntry label="Lock / Unlock" shortcut="Ctrl+L" disabled={!hasSelection} action={actions.toggleLockSelection} />
+          <MenuEntry label="Unlock All on Page" shortcut="Ctrl+Shift+L" action={actions.unlockAllOnPage} />
+          <MenuEntry label="Hide / Show" shortcut="Ctrl+Shift+H" disabled={!hasSelection} action={actions.toggleHideSelection} />
           <DropdownMenuSeparator className={SEP_CLS} />
           <MenuEntry label="Group" shortcut="Ctrl+G" disabled={!hasSelection} action={actions.groupSelection} />
           <MenuEntry
@@ -338,6 +415,39 @@ export function TitleBar() {
           >
             Pixel Grid
           </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            className={ITEM_CLS}
+            checked={outline}
+            onCheckedChange={(v) => {
+              blurActive();
+              actions.setViewFlag('outline', v);
+            }}
+          >
+            Outline Mode
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            className={ITEM_CLS}
+            checked={gridShow}
+            onCheckedChange={(v) => {
+              blurActive();
+              actions.setGridSettings({ show: v });
+            }}
+          >
+            Layout Grid
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            className={ITEM_CLS}
+            checked={gridSnap}
+            onCheckedChange={(v) => {
+              blurActive();
+              actions.setGridSettings({ snap: v });
+            }}
+          >
+            Snap to Grid
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator className={SEP_CLS} />
+          <MenuEntry label="Clear Guides" disabled={guideCount === 0} action={actions.clearGuides} />
+          <MenuEntry label="Fullscreen" action={toggleFullscreen} />
         </TopMenu>
 
         <TopMenu label="Help">

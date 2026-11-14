@@ -68,9 +68,29 @@ export default function IrisApp() {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="rounded-md border border-[#4E4E4E] bg-[#383838] px-3 py-1.5 text-[11px] text-white shadow-xl"
+            className="flex items-center gap-2 rounded-md border border-[#4E4E4E] bg-[#383838] px-3 py-1.5 text-[11px] text-white shadow-xl"
           >
-            {t.msg}
+            <span>{t.msg}</span>
+            {t.action ? (
+              <button
+                type="button"
+                className="rounded bg-[#8B5CF6] px-2 py-0.5 text-[10px] font-semibold text-white transition-colors hover:bg-[#7C3AED]"
+                onClick={() => {
+                  t.action?.run();
+                  useIris.getState().dismissToast(t.id);
+                }}
+              >
+                {t.action.label}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="flex h-5 w-5 items-center justify-center rounded text-[#9A9A9A] transition-colors hover:bg-[#474747] hover:text-white"
+              aria-label="Dismiss"
+              onClick={() => useIris.getState().dismissToast(t.id)}
+            >
+              ×
+            </button>
           </div>
         ))}
       </div>

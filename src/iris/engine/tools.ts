@@ -1,6 +1,7 @@
 /**
  * Iris pointer/keyboard interaction layer — a state machine driving
- * marquee / move / resize / rotate / draw / pan / pen / path-edit / text.
+ * marquee / move / resize / rotate / draw / pan / pen / path-edit / text /
+ * ruler-guides / eyedropper / pinch-zoom.
  */
 
 import { ID, IrisNode, NodeType, PathPoint } from './model';
@@ -34,8 +35,9 @@ import {
 } from './geometry';
 import { overlay } from './overlay';
 import { useIris, HandleId, type Tool } from './store';
-import { requestDraw } from './renderer';
-import { importImageFiles, openIrisBlob, openIrisFile, saveIrisFile } from './files';
+import { requestDraw, samplePixel } from './renderer';
+import { importImageFiles, openIrisBlob, openIrisFile, pickImageFiles, saveIrisFile } from './files';
+import { pushRecentColor } from './colors';
 
 type Interaction =
   | { kind: 'none' }
@@ -65,11 +67,17 @@ type Interaction =
   | { kind: 'draw'; type: NodeType; startWorld: Vec; parentId: ID | null }
   | { kind: 'penHandle' }
   | { kind: 'pathPoint'; index: number; ptsWorld: (PathPoint & { wx: number; wy: number })[]; moved: boolean }
-  | { kind: 'pathHandle'; index: number; which: 'in' | 'out'; moved: boolean };
+  | { kind: 'pathHandle'; index: number; which: 'in' | 'out'; moved: boolean }
+  | { kind: 'guideDrag'; axis: 'x' | 'y'; index: number; entered: boolean }
+  | { kind: 'eyedrop' };
 
 let canvas: HTMLCanvasElement | null = null;
 let interaction: Interaction = { kind: 'none' };
 let hoverHandle: HandleId | null = null;
+
+/* two-pointer pinch state */
+const activePointers = new Map<number, { x: number; y: number }>();
+let pinch: { startDist: number; startMid: Vec; startVp: Viewport } | null = null;
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
@@ -102,6 +110,12 @@ function eventContent(e: { clientX: number; clientY: number }): Vec {
   return { x: e.clientX - r.left - o, y: e.clientY - r.top - o };
 }
 
+/** Raw coords relative to the canvas (ruler area included). */
+function eventCanvas(e: { clientX: number; clientY: number }): Vec {
+  const r = canvasRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
 function pointerInCanvas(e: { clientX: number; clientY: number }): boolean {
   const r = canvasRect();
   return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
@@ -116,6 +130,7 @@ function toolCursor(): string {
   if (overlay.spaceDown || t === 'hand') return 'grab';
   if (t === 'move') return 'default';
   if (t === 'text') return 'text';
+  if (t === 'eyedropper') return 'crosshair';
   return 'crosshair';
 }
 
@@ -169,6 +184,61 @@ function topOnly(ids: ID[]): ID[] {
   });
 }
 
+const DRAW_TOOLS: NodeType[] = ['frame', 'rect', 'ellipse', 'line', 'polygon', 'star', 'arrow'];
+
+/** Constrain a draw drag with Shift: squares for boxes, 45° for lines. */
+function constrainDraw(a: Vec, b: Vec, type: NodeType, shift: boolean): Vec {
+  if (!shift) return b;
+  if (type === 'line' || type === 'arrow') {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const ang = Math.atan2(dy, dx);
+    const len = Math.hypot(dx, dy);
+    const snap = Math.round(ang / (Math.PI / 4)) * (Math.PI / 4);
+    return { x: a.x + Math.cos(snap) * len, y: a.y + Math.sin(snap) * len };
+  }
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const size = Math.max(Math.abs(dx), Math.abs(dy));
+  return { x: a.x + Math.sign(dx || 1) * size, y: a.y + Math.sign(dy || 1) * size };
+}
+
+/** Snap a value to the layout grid when enabled. */
+function snapGridValue(v: number): number {
+  const s = S();
+  const size = s.doc.settings?.grid;
+  if (!size?.snap || size.size < 1) return v;
+  return Math.round(v / size.size) * size.size;
+}
+
+/** Snap a rect's origin/size to the grid when enabled. */
+function snapGridRect(r: Rect): Rect {
+  const s = S();
+  const grid = s.doc.settings?.grid;
+  if (!grid?.snap || grid.size < 1) return r;
+  const x = Math.round(r.x / grid.size) * grid.size;
+  const y = Math.round(r.y / grid.size) * grid.size;
+  const w = Math.max(0, Math.round(r.w / grid.size) * grid.size);
+  const h = Math.max(0, Math.round(r.h / grid.size) * grid.size);
+  return { x, y, w, h };
+}
+
+/** Distance from pointer to an existing guide line (screen px), or null. */
+function guideUnderPointer(world: Vec): { axis: 'x' | 'y'; index: number; at: number } | null {
+  const s = S();
+  const zoom = s.viewport.zoom;
+  const settings = s.doc.settings;
+  for (let i = 0; i < (settings.guidesX?.length ?? 0); i++) {
+    const at = settings.guidesX[i];
+    if (Math.abs(world.x - at) * zoom <= 4) return { axis: 'x', index: i, at };
+  }
+  for (let i = 0; i < (settings.guidesY?.length ?? 0); i++) {
+    const at = settings.guidesY[i];
+    if (Math.abs(world.y - at) * zoom <= 4) return { axis: 'y', index: i, at };
+  }
+  return null;
+}
+
 /* ------------------------------------------------------------------ */
 /* pen                                                                 */
 /* ------------------------------------------------------------------ */
@@ -188,11 +258,24 @@ function finishPen(closed: boolean): void {
   const points: PathPoint[] = pts.map((p) => ({ x: p.x - minX, y: p.y - minY, hx: p.hx, hy: p.hy }));
   const s = S();
   const canClose = closed && points.length >= 3;
+  const frame = frameAtPoint(s.doc, s.currentPageId, { x: minX, y: minY });
+  let x = minX;
+  let y = minY;
+  let parentId: ID | null = frame?.id ?? null;
+  if (parentId) {
+    const parent = s.doc.nodesById[parentId];
+    if (parent) {
+      const inv = mInvert(nodeWorldMatrix(s.doc, parent));
+      const local = mApply(inv, minX, minY);
+      x = local.x;
+      y = local.y;
+    }
+  }
   s.addNode(
     'path',
     {
-      x: minX,
-      y: minY,
+      x,
+      y,
       w: Math.max(maxX - minX, 1),
       h: Math.max(maxY - minY, 1),
       points,
@@ -201,10 +284,51 @@ function finishPen(closed: boolean): void {
       stroke: canClose ? null : '#B3B3B3',
       strokeWidth: 1,
     },
-    null,
+    parentId,
   );
   s.setTool('move');
   requestDraw();
+}
+
+/* ------------------------------------------------------------------ */
+/* re-parenting on drop (Figma-style)                                  */
+/* ------------------------------------------------------------------ */
+
+/** After a move drag ends: re-parent roots whose bbox center is over a
+ *  different frame (or back to the page when outside every frame). */
+function reparentOnDrop(startNodes: { id: ID; parentId: ID | null }[]): void {
+  const s = S();
+  const roots = topOnly(startNodes.map((n) => n.id));
+  if (roots.length === 0) return;
+  const box = boundsOfNodes(s.doc, roots);
+  if (!box) return;
+  const center = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
+  // exclude dragged subtrees so a dragged frame cannot capture itself
+  const target = frameAtPoint(s.doc, s.currentPageId, center, roots);
+  const targetId = target?.id ?? null;
+  const moving = roots.filter((id) => {
+    const n = s.doc.nodesById[id];
+    return !!n && n.parentId !== targetId;
+  });
+  if (moving.length === 0) return;
+  s.reorderNodes(moving, targetId, -1);
+}
+
+/* ------------------------------------------------------------------ */
+/* eyedropper                                                          */
+/* ------------------------------------------------------------------ */
+
+function applyPickedColor(hex: string): void {
+  const s = S();
+  pushRecentColor(hex);
+  overlay.pickedColor = hex;
+  const sel = s.doc.nodesById[s.selection[0] ?? ''];
+  if (sel && ['rect', 'ellipse', 'frame', 'path', 'text', 'polygon', 'star'].includes(sel.type)) {
+    s.updateNodes([sel.id], { fill: hex }, { history: 'fill' });
+    s.toast(`Picked ${hex} — applied to fill`);
+  } else {
+    s.toast(`Picked ${hex} — select a shape to apply it`);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -221,6 +345,21 @@ function onPointerDown(e: PointerEvent): void {
   const s = S();
   const world = eventWorld(e);
   const content = eventContent(e);
+  const raw = eventCanvas(e);
+
+  // touch bookkeeping for pinch
+  if (e.pointerType === 'touch') {
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointers.size === 2) {
+      // begin pinch: cancel whatever interaction was running
+      cancelInteraction();
+      const pts = [...activePointers.values()];
+      const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      pinch = { startDist: Math.max(1, d), startMid: mid, startVp: { ...s.viewport } };
+      return;
+    }
+  }
 
   // finish text editing if active
   if (s.editingTextId) s.setEditingText(null);
@@ -232,6 +371,34 @@ function onPointerDown(e: PointerEvent): void {
     return;
   }
   if (e.button === 2) return; // context menu handles right click
+
+  // ruler guide pulls (only near the ruler strips themselves)
+  if (s.viewFlags.rulers && (raw.x < RULER || raw.y < RULER)) {
+    const inLeftRuler = raw.x < RULER;
+    const inTopRuler = raw.y < RULER;
+    if (inLeftRuler && !inTopRuler) {
+      interaction = { kind: 'guideDrag', axis: 'x', index: -1, entered: false };
+      overlay.guideDrag = { axis: 'x', at: world.x, index: -1, entered: false };
+      return;
+    }
+    if (inTopRuler && !inLeftRuler) {
+      interaction = { kind: 'guideDrag', axis: 'y', index: -1, entered: false };
+      overlay.guideDrag = { axis: 'y', at: world.y, index: -1, entered: false };
+      return;
+    }
+    // corner: fall through
+  }
+
+  // dragging an existing guide line on the canvas (move tool only)
+  if (s.tool === 'move' && !s.editingTextId && !s.editingPathId) {
+    const hit = guideUnderPointer(world);
+    if (hit) {
+      interaction = { kind: 'guideDrag', axis: hit.axis, index: hit.index, entered: true };
+      overlay.guideDrag = { axis: hit.axis, at: hit.at, index: hit.index, entered: true };
+      S().historyBegin();
+      return;
+    }
+  }
 
   // path edit mode
   if (s.editingPathId) {
@@ -294,6 +461,20 @@ function onPointerDown(e: PointerEvent): void {
     return;
   }
 
+  if (tool === 'eyedropper') {
+    interaction = { kind: 'eyedrop' };
+    const hex = samplePixel(e.clientX, e.clientY);
+    if (hex) applyPickedColor(hex);
+    else s.toast('Nothing to sample there');
+    requestDraw();
+    return;
+  }
+
+  if (tool === 'image') {
+    pickImageFiles(world);
+    return;
+  }
+
   if (tool === 'pen') {
     if (!overlay.penDraft) overlay.penDraft = { points: [], cursor: world, dragging: false };
     const draft = overlay.penDraft;
@@ -325,7 +506,7 @@ function onPointerDown(e: PointerEvent): void {
     return;
   }
 
-  if (tool === 'frame' || tool === 'rect' || tool === 'ellipse' || tool === 'line') {
+  if ((DRAW_TOOLS as string[]).includes(tool)) {
     const frame = frameAtPoint(s.doc, s.currentPageId, world);
     interaction = {
       kind: 'draw',
@@ -441,11 +622,54 @@ function onPointerDown(e: PointerEvent): void {
   requestDraw();
 }
 
+/** Abort the running interaction gracefully (pinch takeover, etc.). */
+function cancelInteraction(): void {
+  const s = S();
+  if (interaction.kind === 'move' || interaction.kind === 'resize' || interaction.kind === 'rotate') {
+    if ('ownsHistory' in interaction && interaction.ownsHistory) s.historyCancel();
+  }
+  if (interaction.kind === 'pathPoint' || interaction.kind === 'pathHandle') s.historyCancel();
+  interaction = { kind: 'none' };
+  overlay.marquee = null;
+  overlay.drawPreview = null;
+  overlay.dragBadge = null;
+  overlay.guides = [];
+  overlay.guideDrag = null;
+  requestDraw();
+}
+
 function onPointerMove(e: PointerEvent): void {
   const s = S();
   const world = eventWorld(e);
   const content = eventContent(e);
+  const raw = eventCanvas(e);
   overlay.pointerWorld = world;
+
+  // touch pointer tracking + pinch handling
+  if (e.pointerType === 'touch' && activePointers.has(e.pointerId)) {
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && activePointers.size >= 2) {
+      const pts = [...activePointers.values()];
+      const p0 = pts[0];
+      const p1 = pts[1];
+      const d = Math.max(1, Math.hypot(p0.x - p1.x, p0.y - p1.y));
+      const mid = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+      const zoom = Math.min(256, Math.max(0.02, (pinch.startVp.zoom * d) / pinch.startDist));
+      const k = zoom / pinch.startVp.zoom;
+      const o = contentOrigin();
+      const r = canvasRect();
+      const cx = mid.x - r.left - o;
+      const cy = mid.y - r.top - o;
+      const scx = pinch.startMid.x - r.left - o;
+      const scy = pinch.startMid.y - r.top - o;
+      s.setViewport({
+        zoom,
+        x: cx - (scx - pinch.startVp.x) * k,
+        y: cy - (scy - pinch.startVp.y) * k,
+      });
+      return;
+    }
+  }
 
   if (interaction.kind === 'none') {
     if (!pointerInCanvas(e)) {
@@ -454,6 +678,11 @@ function onPointerMove(e: PointerEvent): void {
     }
     // hover + cursor
     if (s.editingTextId) return;
+    if (s.tool === 'eyedropper') {
+      setCursor('crosshair');
+      requestDraw();
+      return;
+    }
     if (s.tool === 'move') {
       const hh = hitHandle(content);
       if (hh !== hoverHandle) {
@@ -488,6 +717,14 @@ function onPointerMove(e: PointerEvent): void {
       });
       return;
     }
+    case 'guideDrag': {
+      const inCanvasArea = raw.x > RULER && raw.y > RULER;
+      const at = interaction.axis === 'x' ? snapGridValue(world.x) : snapGridValue(world.y);
+      interaction.entered = interaction.entered || inCanvasArea;
+      overlay.guideDrag = { axis: interaction.axis, at, index: interaction.index, entered: interaction.entered };
+      requestDraw();
+      return;
+    }
     case 'marquee': {
       const x = Math.min(interaction.startWorld.x, world.x);
       const y = Math.min(interaction.startWorld.y, world.y);
@@ -511,9 +748,20 @@ function onPointerMove(e: PointerEvent): void {
         if (Math.abs(dx) > Math.abs(dy)) dy = 0;
         else dx = 0;
       }
-      // snapping (unless ctrl held)
+      // grid snap (unless ctrl held)
+      if (!e.ctrlKey && !e.metaKey && s.doc.settings?.grid?.snap) {
+        const startBox = boundsOfNodes(s.doc, interaction.startNodes.map((n) => n.id));
+        if (startBox) {
+          const size = s.doc.settings.grid.size;
+          const tx = Math.round((startBox.x + dx) / size) * size;
+          const ty = Math.round((startBox.y + dy) / size) * size;
+          dx += tx - (startBox.x + dx);
+          dy += ty - (startBox.y + dy);
+        }
+      }
+      // smart snapping (unless ctrl held and grid snap is off)
       overlay.guides = [];
-      if (!e.ctrlKey && !e.metaKey) {
+      if (!e.ctrlKey && !e.metaKey && !s.doc.settings?.grid?.snap) {
         const startBox = boundsOfNodes(s.doc, interaction.startNodes.map((n) => n.id));
         if (startBox) {
           const moving: Rect = { x: startBox.x + dx, y: startBox.y + dy, w: startBox.w, h: startBox.h };
@@ -581,7 +829,7 @@ function onPointerMove(e: PointerEvent): void {
     }
     case 'draw': {
       const a = interaction.startWorld;
-      const b = world;
+      const b = constrainDraw(a, world, interaction.type, e.shiftKey);
       const rect = {
         x: Math.min(a.x, b.x),
         y: Math.min(a.y, b.y),
@@ -595,7 +843,7 @@ function onPointerMove(e: PointerEvent): void {
         type: interaction.type,
         rect,
         flip: dx !== 0 && dy !== 0 ? (dx > 0) !== (dy > 0) : false,
-        diagonal: interaction.type === 'line' ? { x1: a.x, y1: a.y, x2: b.x, y2: b.y } : null,
+        diagonal: interaction.type === 'line' || interaction.type === 'arrow' ? { x1: a.x, y1: a.y, x2: b.x, y2: b.y } : null,
       };
       requestDraw();
       return;
@@ -652,11 +900,49 @@ function onPointerMove(e: PointerEvent): void {
 
 function onPointerUp(e: PointerEvent): void {
   const s = S();
+
+  // touch bookkeeping
+  if (e.pointerType === 'touch') {
+    activePointers.delete(e.pointerId);
+    if (pinch) {
+      if (activePointers.size < 2) {
+        pinch = null;
+        interaction = { kind: 'none' };
+      }
+      return;
+    }
+  }
+
   const world = eventWorld(e);
   switch (interaction.kind) {
     case 'pan': {
       interaction = { kind: 'none' };
       setCursor(toolCursor());
+      return;
+    }
+    case 'guideDrag': {
+      const gd = overlay.guideDrag;
+      const wasExisting = interaction.index >= 0;
+      const inCanvasArea = gd ? eventCanvas(e).x > RULER && eventCanvas(e).y > RULER : false;
+      overlay.guideDrag = null;
+      const idx = interaction.index;
+      const axis = interaction.axis;
+      interaction = { kind: 'none' };
+      if (gd && idx >= 0 && !inCanvasArea) {
+        // dragged an existing guide back into the ruler → remove
+        s.removeGuide(axis, idx);
+      } else if (gd && inCanvasArea) {
+        if (wasExisting) {
+          // commit the pre-drag snapshot first so the move is one undo step
+          s.historyCommit();
+          s.moveGuide(axis, idx, gd.at);
+        } else {
+          s.addGuide(axis, gd.at);
+        }
+      } else {
+        s.historyCancel();
+      }
+      requestDraw();
       return;
     }
     case 'marquee': {
@@ -678,6 +964,9 @@ function onPointerUp(e: PointerEvent): void {
       return;
     }
     case 'move': {
+      if (interaction.moved) {
+        reparentOnDrop(interaction.startNodes);
+      }
       if (interaction.ownsHistory) {
         if (interaction.moved) s.historyCommit();
         else s.historyCancel();
@@ -703,23 +992,26 @@ function onPointerUp(e: PointerEvent): void {
       overlay.drawPreview = null;
       overlay.dragBadge = null;
       interaction = { kind: 'none' };
-      const dx = world.x - a.x;
-      const dy = world.y - a.y;
-      const rect = {
-        x: Math.min(a.x, world.x),
-        y: Math.min(a.y, world.y),
+      const b = constrainDraw(a, world, type, e.shiftKey);
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      let rect = {
+        x: Math.min(a.x, b.x),
+        y: Math.min(a.y, b.y),
         w: Math.abs(dx),
         h: Math.abs(dy),
       };
       const flip = dx !== 0 && dy !== 0 ? (dx > 0) !== (dy > 0) : false;
       const tiny =
-        type === 'line'
+        type === 'line' || type === 'arrow'
           ? Math.hypot(rect.w, rect.h) * s.viewport.zoom < 3
           : rect.w * s.viewport.zoom < 3 || rect.h * s.viewport.zoom < 3;
       if (tiny && type !== 'text') {
         requestDraw();
         return;
       }
+      // grid snapping for drawn shapes
+      rect = snapGridRect(rect);
       // world rect -> parent space
       const parent = parentId ? s.doc.nodesById[parentId] : null;
       let local = rect;
@@ -744,10 +1036,10 @@ function onPointerUp(e: PointerEvent): void {
         const patch: Partial<IrisNode> = {
           x: local.x,
           y: local.y,
-          w: Math.max(local.w, type === 'line' ? 0 : 1),
-          h: Math.max(local.h, type === 'line' ? 0 : 1),
+          w: Math.max(local.w, type === 'line' || type === 'arrow' ? 0 : 1),
+          h: Math.max(local.h, type === 'line' || type === 'arrow' ? 0 : 1),
         };
-        if (type === 'line') patch.flip = flip;
+        if (type === 'line' || type === 'arrow') patch.flip = flip;
         s.addNode(type, patch, parentId);
         s.setTool('move');
       }
@@ -776,6 +1068,10 @@ function onPointerUp(e: PointerEvent): void {
       requestDraw();
       return;
     }
+    case 'eyedrop': {
+      interaction = { kind: 'none' };
+      return;
+    }
   }
 }
 
@@ -800,9 +1096,15 @@ function applyResize(ia: Extract<Interaction, { kind: 'resize' }>, world: Vec, s
       newW = fx === 0 ? n0.w : fx > 0 ? q.x : n0.w - q.x;
       newH = fy === 0 ? n0.h : fy > 0 ? q.y : n0.h - q.y;
     }
+    // grid snap
+    if (s.doc.settings?.grid?.snap) {
+      const size = s.doc.settings.grid.size;
+      newW = Math.max(newW, size) === newW ? Math.round(newW / size) * size : newW;
+      newH = Math.max(newH, size) === newH ? Math.round(newH / size) * size : newH;
+    }
     // clamp
-    const minW = n0.type === 'line' ? 0 : 1;
-    const minH = n0.type === 'line' ? 0 : 1;
+    const minW = n0.type === 'line' || n0.type === 'arrow' ? 0 : 1;
+    const minH = n0.type === 'line' || n0.type === 'arrow' ? 0 : 1;
     if (newW < minW) newW = minW;
     if (newH < minH) newH = minH;
     // aspect lock (corners)
@@ -871,13 +1173,13 @@ function applyResize(ia: Extract<Interaction, { kind: 'resize' }>, world: Vec, s
     const Pinv = ia.parentInvs.get(n0.id)!;
     const local = mApply(Pinv, nx, ny);
     const w = Math.max(1, n0.w * sx);
-    const h = Math.max(1, n0.h * sy);
+    const hh = Math.max(1, n0.h * sy);
     if (n0.type === 'frame' || n0.type === 'group') {
       // setNodeRect also scales children
-      rectUpdates.push({ id: n0.id, rect: { x: local.x, y: local.y, w, h } });
+      rectUpdates.push({ id: n0.id, rect: { x: local.x, y: local.y, w, h: hh } });
       continue;
     }
-    const patch: Partial<IrisNode> = { x: local.x, y: local.y, w, h };
+    const patch: Partial<IrisNode> = { x: local.x, y: local.y, w, h: hh };
     if (n0.type === 'text') patch.fontSize = Math.max(1, n0.fontSize * ((sx + sy) / 2));
     if (n0.cornerRadius) patch.cornerRadius = Math.max(0, n0.cornerRadius * ((sx + sy) / 2));
     if (n0.type === 'path' && n0.points.length) {
@@ -1000,6 +1302,11 @@ function onDoubleClick(e: MouseEvent): void {
     requestDraw();
     return;
   }
+  if (hit.type === 'image' && hit.src) {
+    // double-click image: replace its source
+    pickImageFiles(eventWorld(e));
+    return;
+  }
   // deep select into groups/frames
   s.setSelection([hit.id]);
 }
@@ -1015,6 +1322,11 @@ function onWheel(e: WheelEvent): void {
   const mult = e.deltaMode === 1 ? 16 : 1;
   let dx = e.deltaX * mult;
   let dy = e.deltaY * mult;
+  if (e.altKey) {
+    // alt+wheel: horizontal pan
+    dx = dy;
+    dy = 0;
+  }
   if (e.shiftKey && dx === 0) {
     dx = dy;
     dy = 0;
@@ -1077,7 +1389,8 @@ function onKeyDown(e: KeyboardEvent): void {
         return;
       case 'c':
         e.preventDefault();
-        s.copySelection();
+        if (e.altKey) s.copyStyle();
+        else s.copySelection();
         return;
       case 'x':
         e.preventDefault();
@@ -1085,7 +1398,8 @@ function onKeyDown(e: KeyboardEvent): void {
         return;
       case 'v':
         e.preventDefault();
-        s.paste(null);
+        if (e.altKey) s.pasteStyle();
+        else s.paste(null);
         return;
       case 'd':
         e.preventDefault();
@@ -1093,7 +1407,8 @@ function onKeyDown(e: KeyboardEvent): void {
         return;
       case 'a':
         e.preventDefault();
-        s.selectAll();
+        if (e.shiftKey) s.selectSameType();
+        else s.selectAll();
         return;
       case 'g':
         e.preventDefault();
@@ -1113,6 +1428,17 @@ function onKeyDown(e: KeyboardEvent): void {
       case 'o':
         e.preventDefault();
         openIrisFile();
+        return;
+      case 'l':
+        e.preventDefault();
+        if (e.shiftKey) s.unlockAllOnPage();
+        else if (s.selection.length) s.toggleLockSelection();
+        return;
+      case 'h':
+        if (e.shiftKey) {
+          e.preventDefault();
+          if (s.selection.length) s.toggleHideSelection();
+        }
         return;
       case '0':
         e.preventDefault();
@@ -1146,6 +1472,14 @@ function onKeyDown(e: KeyboardEvent): void {
     return;
   }
 
+  // Shift+H / Shift+V → flip (before tool switching)
+  if (e.shiftKey && (e.key === 'H' || e.key === 'V')) {
+    if (s.selection.length) {
+      s.flipSelection(e.key === 'H' ? 'h' : 'v');
+      return;
+    }
+  }
+
   switch (e.key) {
     case 'v':
     case 'V':
@@ -1176,8 +1510,31 @@ function onKeyDown(e: KeyboardEvent): void {
       switchTool('pen');
       return;
     case 'h':
+      if (e.shiftKey) break; // handled above
+      switchTool('hand');
+      return;
     case 'H':
       switchTool('hand');
+      return;
+    case 'y':
+    case 'Y':
+      switchTool('polygon');
+      return;
+    case 's':
+    case 'S':
+      switchTool('star');
+      return;
+    case 'a':
+    case 'A':
+      switchTool('arrow');
+      return;
+    case 'i':
+    case 'I':
+      switchTool('eyedropper');
+      return;
+    case 'm':
+    case 'M':
+      switchTool('image');
       return;
     case 'Escape': {
       if (overlay.penDraft) {
@@ -1318,6 +1675,9 @@ export function initTools(c: HTMLCanvasElement): () => void {
   overlay.spaceDown = false;
   overlay.penDraft = null;
   overlay.pathEdit = null;
+  overlay.guideDrag = null;
+  activePointers.clear();
+  pinch = null;
 
   const down = (e: PointerEvent) => onPointerDown(e);
   const move = (e: PointerEvent) => onPointerMove(e);
