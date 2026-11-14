@@ -44,6 +44,7 @@ import { Switch } from '@/components/ui/switch';
 import { useIris, useSelectedNodes, type AlignMode } from '../engine/store';
 import { boundsOfNodes } from '../engine/geometry';
 import { BLEND_MODES, FRAME_PRESETS, type ArrowHead, type DashStyle, type TextCase } from '../engine/model';
+import { getRecentColors, getSwatches } from '../engine/colors';
 import { exportPNG, exportSVG, svgStringOfSelection } from '../engine/export';
 import { cn } from '@/lib/utils';
 import { NumberField } from './NumberField';
@@ -110,6 +111,74 @@ function Section({ title, children }: { title?: string; children: React.ReactNod
         </div>
       ) : null}
       {children}
+    </div>
+  );
+}
+
+/** Collapsible section with a + / - header (Figma panel style). */
+function CollapsibleSection({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-b border-[#3E3E3E]">
+      <button
+        type="button"
+        className="flex h-9 w-full items-center gap-1.5 px-3 text-left"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="flex h-4 w-4 items-center justify-center rounded text-[11px] font-semibold text-[#9A9A9A]">
+          {open ? '−' : '+'}
+        </span>
+        <span className="text-[11px] font-semibold text-white">{title}</span>
+      </button>
+      {open ? <div className="px-3 pb-3">{children}</div> : null}
+    </div>
+  );
+}
+
+/** Recent + saved color swatches (re-reads localStorage as the selection changes). */
+function StyleSwatches() {
+  const selection = useIris((s) => s.selection);
+  const updateNodes = useIris((s) => s.updateNodes);
+  const hasFillable = useIris((s) => {
+    const n = s.doc.nodesById[s.selection[0] ?? ''];
+    return !!n && ['rect', 'ellipse', 'frame', 'path', 'text', 'polygon', 'star', 'section'].includes(n.type);
+  });
+  const colors = useMemo<string[]>(
+    () => [...getRecentColors(), ...getSwatches()],
+    [selection],
+  );
+
+  if (colors.length === 0) {
+    return (
+      <p className="text-[10px] leading-4 text-[#6F6F6F]">
+        Colors you pick appear here. Use the eyedropper (I) or a fill picker to build your palette.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {colors.map((c) => (
+        <button
+          key={c}
+          type="button"
+          className="h-6 w-6 rounded-md border border-[#4E4E4E] transition-transform hover:scale-105"
+          style={{ background: c }}
+          title={hasFillable && selection.length ? `Apply ${c} to fill` : c}
+          aria-label={`Swatch ${c}`}
+          onClick={() => {
+            if (hasFillable && selection.length) updateNodes(selection, { fill: c }, { history: 'fill' });
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -221,21 +290,21 @@ function DesignTab() {
                 }}
               />
             ) : null}
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-[11px] text-[#C9C9C9]">Background</span>
+              <div className="w-24">
+                <ColorField
+                  value={settings.bg}
+                  allowNone={false}
+                  ariaLabel="Page background"
+                  onChange={(v) => actions.setSettings({ bg: v ?? '#242424' })}
+                />
+              </div>
+            </div>
           </Section>
 
           <Section title="Canvas">
             <div className="flex flex-col gap-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-[#C9C9C9]">Background</span>
-                <div className="w-24">
-                  <ColorField
-                    value={settings.bg}
-                    allowNone={false}
-                    ariaLabel="Canvas background"
-                    onChange={(v) => actions.setSettings({ bg: v ?? '#242424' })}
-                  />
-                </div>
-              </div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-[#C9C9C9]">Layout grid</span>
                 <Switch
@@ -282,18 +351,31 @@ function DesignTab() {
             </div>
           </Section>
 
-          <Section title="Quick tips">
-            <ul className="space-y-1.5 text-[11px] leading-4 text-[#9A9A9A]">
-              <li>V Move · K Scale · F Frame · Shift+S Section</li>
-              <li>R Rect · O Ellipse · L Line · Shift+L Arrow</li>
-              <li>P Pen · Shift+P Pencil · T Text · C Comment</li>
-              <li>Ctrl+Enter to present · Shift+R rulers</li>
-              <li>Space + drag to pan · Ctrl + wheel to zoom</li>
-              <li>Drag from a ruler to create a guide</li>
-              <li>Layers list the topmost layer first</li>
-              <li>Everything is saved locally, automatically</li>
-            </ul>
-          </Section>
+          <CollapsibleSection title="Styles" defaultOpen={false}>
+            <StyleSwatches />
+          </CollapsibleSection>
+
+          <CollapsibleSection title="Export" defaultOpen={false}>
+            <div className="flex flex-col gap-1.5">
+              <button
+                type="button"
+                className="h-8 rounded-md border border-[#3E3E3E] bg-[#1E1E1E] text-[11px] text-[#E5E5E5] transition-colors hover:border-[#0D99FF]"
+                onClick={() => void exportPNG('page', 2)}
+              >
+                Export page — PNG 2x
+              </button>
+              <button
+                type="button"
+                className="h-8 rounded-md border border-[#3E3E3E] bg-[#1E1E1E] text-[11px] text-[#E5E5E5] transition-colors hover:border-[#0D99FF]"
+                onClick={() => exportSVG('page')}
+              >
+                Export page — SVG
+              </button>
+              <p className="text-[10px] leading-4 text-[#6F6F6F]">
+                Select objects to export just those, or open Export… (Ctrl+Shift+E) for full options.
+              </p>
+            </div>
+          </CollapsibleSection>
       </div>
     );
   }

@@ -34633,3 +34633,29 @@ Import trace:
 [00:46:21.148] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
 [00:46:42.226] Browser WARN    Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
 [00:47:00.590] Server  LOG     ✓ Compiled in 283ms
+[00:49:29.800] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:49:56.199] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:50:36.332] Server  LOG     ✓ Compiled in 146ms
+[00:50:36.437] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:50:36.441] Browser ERROR   uncaughtError: ReferenceError: CollapsibleSection is not defined
+[00:50:36.707] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:50:36.707] Browser ERROR   uncaughtError: ReferenceError: CollapsibleSection is not defined
+[00:50:36.793] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:50:36.793] Browser ERROR   uncaughtError: ReferenceError: CollapsibleSection is not defined
+[00:50:36.813] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:50:37.182] Browser ERROR   uncaughtError: ReferenceError: CollapsibleSection is not defined
+[00:50:38.807] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:50:40.537] Browser ERROR   uncaughtError: ReferenceError: CollapsibleSection is not defined
+[00:50:41.541] Browser ERROR   uncaughtError: ReferenceError: CollapsibleSection is not defined
+[00:50:45.262] Server  LOG     ✓ Compiled in 362ms
+[00:50:45.284] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:50:45.583] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:50:45.598] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:50:45.765] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:50:45.779] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:50:45.839] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:50:47.216] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:51:07.978] Server  LOG     ✓ Compiled in 167ms
+[00:51:20.712] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:51:31.659] Server  LOG     ✓ Compiled in 163ms
+[00:51:47.774] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold

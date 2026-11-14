@@ -5664,13 +5664,15 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$s
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/iris/engine/store.ts [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$geometry$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/iris/engine/geometry.ts [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$model$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/iris/engine/model.ts [app-client] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$colors$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/iris/engine/colors.ts [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$export$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__ = __turbopack_context__.i("[project]/src/iris/engine/export.ts [app-client] (ecmascript) <locals>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$utils$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/lib/utils.ts [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/iris/ui/NumberField.tsx [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$ColorField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/iris/ui/ColorField.tsx [app-client] (ecmascript)");
 ;
-var _s = __turbopack_context__.k.signature(), _s1 = __turbopack_context__.k.signature(), _s2 = __turbopack_context__.k.signature(), _s3 = __turbopack_context__.k.signature(), _s4 = __turbopack_context__.k.signature(), _s5 = __turbopack_context__.k.signature(), _s6 = __turbopack_context__.k.signature();
+var _s = __turbopack_context__.k.signature(), _s1 = __turbopack_context__.k.signature(), _s2 = __turbopack_context__.k.signature(), _s3 = __turbopack_context__.k.signature(), _s4 = __turbopack_context__.k.signature(), _s5 = __turbopack_context__.k.signature(), _s6 = __turbopack_context__.k.signature(), _s7 = __turbopack_context__.k.signature(), _s8 = __turbopack_context__.k.signature();
 'use client';
+;
 ;
 ;
 ;
@@ -5818,29 +5820,157 @@ function Section({ title, children }) {
                 children: title
             }, void 0, false, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 108,
+                lineNumber: 109,
                 columnNumber: 9
             }, this) : null,
             children
         ]
     }, void 0, true, {
         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-        lineNumber: 106,
+        lineNumber: 107,
         columnNumber: 5
     }, this);
 }
 _c = Section;
+/** Collapsible section with a + / - header (Figma panel style). */ function CollapsibleSection({ title, defaultOpen = false, children }) {
+    _s();
+    const [open, setOpen] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(defaultOpen);
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+        className: "border-b border-[#3E3E3E]",
+        children: [
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                type: "button",
+                className: "flex h-9 w-full items-center gap-1.5 px-3 text-left",
+                "aria-expanded": open,
+                onClick: ()=>setOpen((v)=>!v),
+                children: [
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                        className: "flex h-4 w-4 items-center justify-center rounded text-[11px] font-semibold text-[#9A9A9A]",
+                        children: open ? '−' : '+'
+                    }, void 0, false, {
+                        fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+                        lineNumber: 137,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                        className: "text-[11px] font-semibold text-white",
+                        children: title
+                    }, void 0, false, {
+                        fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+                        lineNumber: 140,
+                        columnNumber: 9
+                    }, this)
+                ]
+            }, void 0, true, {
+                fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+                lineNumber: 131,
+                columnNumber: 7
+            }, this),
+            open ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "px-3 pb-3",
+                children: children
+            }, void 0, false, {
+                fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+                lineNumber: 142,
+                columnNumber: 15
+            }, this) : null
+        ]
+    }, void 0, true, {
+        fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+        lineNumber: 130,
+        columnNumber: 5
+    }, this);
+}
+_s(CollapsibleSection, "pG0khZI24VrkSmCZcWM9qqrVMh4=");
+_c1 = CollapsibleSection;
+/** Recent + saved color swatches (re-reads localStorage as the selection changes). */ function StyleSwatches() {
+    _s1();
+    const selection = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"])({
+        "StyleSwatches.useIris[selection]": (s)=>s.selection
+    }["StyleSwatches.useIris[selection]"]);
+    const updateNodes = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"])({
+        "StyleSwatches.useIris[updateNodes]": (s)=>s.updateNodes
+    }["StyleSwatches.useIris[updateNodes]"]);
+    const hasFillable = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"])({
+        "StyleSwatches.useIris[hasFillable]": (s)=>{
+            const n = s.doc.nodesById[s.selection[0] ?? ''];
+            return !!n && [
+                'rect',
+                'ellipse',
+                'frame',
+                'path',
+                'text',
+                'polygon',
+                'star',
+                'section'
+            ].includes(n.type);
+        }
+    }["StyleSwatches.useIris[hasFillable]"]);
+    const colors = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useMemo"])({
+        "StyleSwatches.useMemo[colors]": ()=>[
+                ...(0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$colors$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getRecentColors"])(),
+                ...(0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$colors$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getSwatches"])()
+            ]
+    }["StyleSwatches.useMemo[colors]"], [
+        selection
+    ]);
+    if (colors.length === 0) {
+        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+            className: "text-[10px] leading-4 text-[#6F6F6F]",
+            children: "Colors you pick appear here. Use the eyedropper (I) or a fill picker to build your palette."
+        }, void 0, false, {
+            fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+            lineNumber: 162,
+            columnNumber: 7
+        }, this);
+    }
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+        className: "flex flex-wrap gap-1.5",
+        children: colors.map((c)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                type: "button",
+                className: "h-6 w-6 rounded-md border border-[#4E4E4E] transition-transform hover:scale-105",
+                style: {
+                    background: c
+                },
+                title: hasFillable && selection.length ? `Apply ${c} to fill` : c,
+                "aria-label": `Swatch ${c}`,
+                onClick: ()=>{
+                    if (hasFillable && selection.length) updateNodes(selection, {
+                        fill: c
+                    }, {
+                        history: 'fill'
+                    });
+                }
+            }, c, false, {
+                fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+                lineNumber: 170,
+                columnNumber: 9
+            }, this))
+    }, void 0, false, {
+        fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+        lineNumber: 168,
+        columnNumber: 5
+    }, this);
+}
+_s1(StyleSwatches, "3h0FK5xCVUy6lgwbFRXF+9qwHmo=", false, function() {
+    return [
+        __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"],
+        __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"],
+        __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"]
+    ];
+});
+_c2 = StyleSwatches;
 function FieldLabel({ children }) {
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
         className: "flex h-[26px] w-4 shrink-0 items-center justify-start text-[10px] text-[#9A9A9A]",
         children: children
     }, void 0, false, {
         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-        lineNumber: 119,
+        lineNumber: 188,
         columnNumber: 5
     }, this);
 }
-_c1 = FieldLabel;
+_c3 = FieldLabel;
 function IconBtn({ label, Icon, onClick, disabled, active }) {
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
         type: "button",
@@ -5855,18 +5985,18 @@ function IconBtn({ label, Icon, onClick, disabled, active }) {
             "aria-hidden": true
         }, void 0, false, {
             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-            lineNumber: 150,
+            lineNumber: 219,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-        lineNumber: 139,
+        lineNumber: 208,
         columnNumber: 5
     }, this);
 }
-_c2 = IconBtn;
+_c4 = IconBtn;
 function DesignTab() {
-    _s();
+    _s2();
     const doc = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"])({
         "DesignTab.useIris[doc]": (s)=>s.doc
     }["DesignTab.useIris[doc]"]);
@@ -5936,28 +6066,66 @@ function DesignTab() {
             children: [
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
                     title: "Page",
-                    children: page ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
-                        className: "iris-input",
-                        defaultValue: page.name,
-                        "aria-label": "Page name",
-                        spellCheck: false,
-                        onBlur: (e)=>{
-                            const v = e.target.value.trim();
-                            if (v && v !== page.name) actions.renamePage(page.id, v);
-                            else e.target.value = page.name;
-                        },
-                        onKeyDown: (e)=>{
-                            e.stopPropagation();
-                            if (e.key === 'Enter') e.target.blur();
-                        }
-                    }, page.id, false, {
-                        fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 207,
-                        columnNumber: 15
-                    }, this) : null
-                }, void 0, false, {
+                    children: [
+                        page ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
+                            className: "iris-input",
+                            defaultValue: page.name,
+                            "aria-label": "Page name",
+                            spellCheck: false,
+                            onBlur: (e)=>{
+                                const v = e.target.value.trim();
+                                if (v && v !== page.name) actions.renamePage(page.id, v);
+                                else e.target.value = page.name;
+                            },
+                            onKeyDown: (e)=>{
+                                e.stopPropagation();
+                                if (e.key === 'Enter') e.target.blur();
+                            }
+                        }, page.id, false, {
+                            fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+                            lineNumber: 276,
+                            columnNumber: 15
+                        }, this) : null,
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            className: "mt-2 flex items-center justify-between",
+                            children: [
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                    className: "text-[11px] text-[#C9C9C9]",
+                                    children: "Background"
+                                }, void 0, false, {
+                                    fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+                                    lineNumber: 294,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    className: "w-24",
+                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$ColorField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["ColorField"], {
+                                        value: settings.bg,
+                                        allowNone: false,
+                                        ariaLabel: "Page background",
+                                        onChange: (v)=>actions.setSettings({
+                                                bg: v ?? '#242424'
+                                            })
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+                                        lineNumber: 296,
+                                        columnNumber: 17
+                                    }, this)
+                                }, void 0, false, {
+                                    fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+                                    lineNumber: 295,
+                                    columnNumber: 15
+                                }, this)
+                            ]
+                        }, void 0, true, {
+                            fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+                            lineNumber: 293,
+                            columnNumber: 13
+                        }, this)
+                    ]
+                }, void 0, true, {
                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                    lineNumber: 205,
+                    lineNumber: 274,
                     columnNumber: 11
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -5970,46 +6138,10 @@ function DesignTab() {
                                 children: [
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                         className: "text-[11px] text-[#C9C9C9]",
-                                        children: "Background"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 229,
-                                        columnNumber: 17
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "w-24",
-                                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$ColorField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["ColorField"], {
-                                            value: settings.bg,
-                                            allowNone: false,
-                                            ariaLabel: "Canvas background",
-                                            onChange: (v)=>actions.setSettings({
-                                                    bg: v ?? '#242424'
-                                                })
-                                        }, void 0, false, {
-                                            fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 231,
-                                            columnNumber: 19
-                                        }, this)
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 230,
-                                        columnNumber: 17
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 228,
-                                columnNumber: 15
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex items-center justify-between",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-[11px] text-[#C9C9C9]",
                                         children: "Layout grid"
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 240,
+                                        lineNumber: 309,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$switch$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Switch"], {
@@ -6021,13 +6153,13 @@ function DesignTab() {
                                             })
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 241,
+                                        lineNumber: 310,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 239,
+                                lineNumber: 308,
                                 columnNumber: 15
                             }, this),
                             settings.grid.show ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -6039,7 +6171,7 @@ function DesignTab() {
                                                 children: "G"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 251,
+                                                lineNumber: 320,
                                                 columnNumber: 21
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -6052,7 +6184,7 @@ function DesignTab() {
                                                     })
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 252,
+                                                lineNumber: 321,
                                                 columnNumber: 21
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -6060,13 +6192,13 @@ function DesignTab() {
                                                 children: "px"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 259,
+                                                lineNumber: 328,
                                                 columnNumber: 21
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 250,
+                                        lineNumber: 319,
                                         columnNumber: 19
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6077,7 +6209,7 @@ function DesignTab() {
                                                 children: "Snap to grid"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 262,
+                                                lineNumber: 331,
                                                 columnNumber: 21
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$switch$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Switch"], {
@@ -6089,13 +6221,13 @@ function DesignTab() {
                                                     })
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 263,
+                                                lineNumber: 332,
                                                 columnNumber: 21
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 261,
+                                        lineNumber: 330,
                                         columnNumber: 19
                                     }, this)
                                 ]
@@ -6112,96 +6244,82 @@ function DesignTab() {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 273,
+                                lineNumber: 342,
                                 columnNumber: 17
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 227,
+                        lineNumber: 307,
                         columnNumber: 13
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                    lineNumber: 226,
+                    lineNumber: 306,
                     columnNumber: 11
                 }, this),
-                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
-                    title: "Quick tips",
-                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("ul", {
-                        className: "space-y-1.5 text-[11px] leading-4 text-[#9A9A9A]",
+                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(CollapsibleSection, {
+                    title: "Styles",
+                    defaultOpen: false,
+                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(StyleSwatches, {}, void 0, false, {
+                        fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+                        lineNumber: 355,
+                        columnNumber: 13
+                    }, this)
+                }, void 0, false, {
+                    fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
+                    lineNumber: 354,
+                    columnNumber: 11
+                }, this),
+                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(CollapsibleSection, {
+                    title: "Export",
+                    defaultOpen: false,
+                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "flex flex-col gap-1.5",
                         children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("li", {
-                                children: "V Move · K Scale · F Frame · Shift+S Section"
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                type: "button",
+                                className: "h-8 rounded-md border border-[#3E3E3E] bg-[#1E1E1E] text-[11px] text-[#E5E5E5] transition-colors hover:border-[#0D99FF]",
+                                onClick: ()=>void (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$export$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["exportPNG"])('page', 2),
+                                children: "Export page — PNG 2x"
                             }, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 287,
+                                lineNumber: 360,
                                 columnNumber: 15
                             }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("li", {
-                                children: "R Rect · O Ellipse · L Line · Shift+L Arrow"
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                type: "button",
+                                className: "h-8 rounded-md border border-[#3E3E3E] bg-[#1E1E1E] text-[11px] text-[#E5E5E5] transition-colors hover:border-[#0D99FF]",
+                                onClick: ()=>(0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$export$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["exportSVG"])('page'),
+                                children: "Export page — SVG"
                             }, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 288,
+                                lineNumber: 367,
                                 columnNumber: 15
                             }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("li", {
-                                children: "P Pen · Shift+P Pencil · T Text · C Comment"
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                className: "text-[10px] leading-4 text-[#6F6F6F]",
+                                children: "Select objects to export just those, or open Export… (Ctrl+Shift+E) for full options."
                             }, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 289,
-                                columnNumber: 15
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("li", {
-                                children: "Ctrl+Enter to present · Shift+R rulers"
-                            }, void 0, false, {
-                                fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 290,
-                                columnNumber: 15
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("li", {
-                                children: "Space + drag to pan · Ctrl + wheel to zoom"
-                            }, void 0, false, {
-                                fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 291,
-                                columnNumber: 15
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("li", {
-                                children: "Drag from a ruler to create a guide"
-                            }, void 0, false, {
-                                fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 292,
-                                columnNumber: 15
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("li", {
-                                children: "Layers list the topmost layer first"
-                            }, void 0, false, {
-                                fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 293,
-                                columnNumber: 15
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("li", {
-                                children: "Everything is saved locally, automatically"
-                            }, void 0, false, {
-                                fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 294,
+                                lineNumber: 374,
                                 columnNumber: 15
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 286,
+                        lineNumber: 359,
                         columnNumber: 13
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                    lineNumber: 285,
+                    lineNumber: 358,
                     columnNumber: 11
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-            lineNumber: 204,
+            lineNumber: 273,
             columnNumber: 7
         }, this);
     }
@@ -6216,7 +6334,7 @@ function DesignTab() {
                         children: single ? single.name : `${nodes.length} selected`
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 305,
+                        lineNumber: 387,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6228,7 +6346,7 @@ function DesignTab() {
                                 onClick: actions.toggleLockSelection
                             }, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 309,
+                                lineNumber: 391,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(IconBtn, {
@@ -6237,19 +6355,19 @@ function DesignTab() {
                                 onClick: actions.toggleHideSelection
                             }, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 314,
+                                lineNumber: 396,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 308,
+                        lineNumber: 390,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 304,
+                lineNumber: 386,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6275,23 +6393,23 @@ function DesignTab() {
                                         "aria-hidden": true
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 338,
+                                        lineNumber: 420,
                                         columnNumber: 19
                                     }, this)
                                 }, mode, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 329,
+                                    lineNumber: 411,
                                     columnNumber: 17
                                 }, this);
                             })
                         }, void 0, false, {
                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                            lineNumber: 325,
+                            lineNumber: 407,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 324,
+                        lineNumber: 406,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -6306,7 +6424,7 @@ function DesignTab() {
                                                 children: "X"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 349,
+                                                lineNumber: 431,
                                                 columnNumber: 15
                                             }, this),
                                             single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -6321,7 +6439,7 @@ function DesignTab() {
                                                     })
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 351,
+                                                lineNumber: 433,
                                                 columnNumber: 17
                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
                                                 value: bbox ? Math.round(bbox.x * 100) / 100 : 0,
@@ -6329,13 +6447,13 @@ function DesignTab() {
                                                 onChange: (v)=>bbox && actions.moveSelectionWorld(v - bbox.x, 0, 'bbox')
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 357,
+                                                lineNumber: 439,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 348,
+                                        lineNumber: 430,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6345,7 +6463,7 @@ function DesignTab() {
                                                 children: "Y"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 365,
+                                                lineNumber: 447,
                                                 columnNumber: 15
                                             }, this),
                                             single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -6360,7 +6478,7 @@ function DesignTab() {
                                                     })
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 367,
+                                                lineNumber: 449,
                                                 columnNumber: 17
                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
                                                 value: bbox ? Math.round(bbox.y * 100) / 100 : 0,
@@ -6368,13 +6486,13 @@ function DesignTab() {
                                                 onChange: (v)=>bbox && actions.moveSelectionWorld(0, v - bbox.y, 'bbox')
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 373,
+                                                lineNumber: 455,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 364,
+                                        lineNumber: 446,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6384,7 +6502,7 @@ function DesignTab() {
                                                 children: "W"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 381,
+                                                lineNumber: 463,
                                                 columnNumber: 15
                                             }, this),
                                             single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -6402,7 +6520,7 @@ function DesignTab() {
                                                     })
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 383,
+                                                lineNumber: 465,
                                                 columnNumber: 17
                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
                                                 value: bbox ? Math.round(bbox.w * 100) / 100 : 0,
@@ -6412,13 +6530,13 @@ function DesignTab() {
                                                 onChange: (v)=>actions.resizeSelectionBox(v, bbox?.h ?? 1)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 397,
+                                                lineNumber: 479,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 380,
+                                        lineNumber: 462,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6428,7 +6546,7 @@ function DesignTab() {
                                                 children: "H"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 407,
+                                                lineNumber: 489,
                                                 columnNumber: 15
                                             }, this),
                                             single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -6447,7 +6565,7 @@ function DesignTab() {
                                                     })
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 409,
+                                                lineNumber: 491,
                                                 columnNumber: 17
                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
                                                 value: bbox ? Math.round(bbox.h * 100) / 100 : 0,
@@ -6457,13 +6575,13 @@ function DesignTab() {
                                                 onChange: (v)=>actions.resizeSelectionBox(bbox?.w ?? 1, v)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 424,
+                                                lineNumber: 506,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 406,
+                                        lineNumber: 488,
                                         columnNumber: 13
                                     }, this),
                                     single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -6475,7 +6593,7 @@ function DesignTab() {
                                                         children: "∠"
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                        lineNumber: 436,
+                                                        lineNumber: 518,
                                                         columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -6492,13 +6610,13 @@ function DesignTab() {
                                                             })
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                        lineNumber: 437,
+                                                        lineNumber: 519,
                                                         columnNumber: 19
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 435,
+                                                lineNumber: 517,
                                                 columnNumber: 17
                                             }, this),
                                             showRadius ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6508,7 +6626,7 @@ function DesignTab() {
                                                         children: "⌒"
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                        lineNumber: 447,
+                                                        lineNumber: 529,
                                                         columnNumber: 21
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -6524,17 +6642,17 @@ function DesignTab() {
                                                             })
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                        lineNumber: 448,
+                                                        lineNumber: 530,
                                                         columnNumber: 21
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 446,
+                                                lineNumber: 528,
                                                 columnNumber: 19
                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {}, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 456,
+                                                lineNumber: 538,
                                                 columnNumber: 19
                                             }, this)
                                         ]
@@ -6542,7 +6660,7 @@ function DesignTab() {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 347,
+                                lineNumber: 429,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6556,7 +6674,7 @@ function DesignTab() {
                                         onClick: ()=>actions.flipSelection('h')
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 463,
+                                        lineNumber: 545,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(IconBtn, {
@@ -6565,7 +6683,7 @@ function DesignTab() {
                                         onClick: ()=>actions.flipSelection('v')
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 464,
+                                        lineNumber: 546,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(IconBtn, {
@@ -6574,7 +6692,7 @@ function DesignTab() {
                                         onClick: ()=>actions.rotateSelectionBy(-90)
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 465,
+                                        lineNumber: 547,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(IconBtn, {
@@ -6583,7 +6701,7 @@ function DesignTab() {
                                         onClick: ()=>actions.rotateSelectionBy(90)
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 466,
+                                        lineNumber: 548,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6591,7 +6709,7 @@ function DesignTab() {
                                         "aria-hidden": true
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 467,
+                                        lineNumber: 549,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(IconBtn, {
@@ -6600,7 +6718,7 @@ function DesignTab() {
                                         onClick: ()=>actions.zorder('backward')
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 468,
+                                        lineNumber: 550,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(IconBtn, {
@@ -6609,7 +6727,7 @@ function DesignTab() {
                                         onClick: ()=>actions.zorder('forward')
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 469,
+                                        lineNumber: 551,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(IconBtn, {
@@ -6618,7 +6736,7 @@ function DesignTab() {
                                         onClick: ()=>actions.zorder('back')
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 470,
+                                        lineNumber: 552,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(IconBtn, {
@@ -6627,19 +6745,19 @@ function DesignTab() {
                                         onClick: ()=>actions.zorder('front')
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 471,
+                                        lineNumber: 553,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 462,
+                                lineNumber: 544,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 346,
+                        lineNumber: 428,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -6651,12 +6769,12 @@ function DesignTab() {
                                     children: "Opacity"
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 478,
+                                    lineNumber: 560,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 477,
+                                lineNumber: 559,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6687,7 +6805,7 @@ function DesignTab() {
                                         }
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 483,
+                                        lineNumber: 565,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6704,18 +6822,18 @@ function DesignTab() {
                                                 })
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 502,
+                                            lineNumber: 584,
                                             columnNumber: 15
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 501,
+                                        lineNumber: 583,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 482,
+                                lineNumber: 564,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6725,7 +6843,7 @@ function DesignTab() {
                                         children: "⧉"
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 512,
+                                        lineNumber: 594,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -6742,24 +6860,24 @@ function DesignTab() {
                                                 children: b === 'normal' ? 'Normal' : b.replace('-', ' ')
                                             }, b, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 522,
+                                                lineNumber: 604,
                                                 columnNumber: 17
                                             }, this))
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 513,
+                                        lineNumber: 595,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 511,
+                                lineNumber: 593,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 476,
+                        lineNumber: 558,
                         columnNumber: 9
                     }, this),
                     showFill && single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -6777,7 +6895,7 @@ function DesignTab() {
                                     })
                             }, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 533,
+                                lineNumber: 615,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6791,7 +6909,7 @@ function DesignTab() {
                                                 children: "Gradient"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 540,
+                                                lineNumber: 622,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$switch$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Switch"], {
@@ -6812,13 +6930,13 @@ function DesignTab() {
                                                     })
                                             }, void 0, false, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 543,
+                                                lineNumber: 625,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 539,
+                                        lineNumber: 621,
                                         columnNumber: 15
                                     }, this),
                                     single.fillGradient ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6844,7 +6962,7 @@ function DesignTab() {
                                                         children: "Linear"
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                        lineNumber: 574,
+                                                        lineNumber: 656,
                                                         columnNumber: 21
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -6852,13 +6970,13 @@ function DesignTab() {
                                                         children: "Radial"
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                        lineNumber: 575,
+                                                        lineNumber: 657,
                                                         columnNumber: 21
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 562,
+                                                lineNumber: 644,
                                                 columnNumber: 19
                                             }, this),
                                             single.fillGradient.type === 'linear' ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6868,7 +6986,7 @@ function DesignTab() {
                                                         children: "∠"
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                        lineNumber: 579,
+                                                        lineNumber: 661,
                                                         columnNumber: 23
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -6888,13 +7006,13 @@ function DesignTab() {
                                                             })
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                        lineNumber: 580,
+                                                        lineNumber: 662,
                                                         columnNumber: 23
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 578,
+                                                lineNumber: 660,
                                                 columnNumber: 21
                                             }, this) : null,
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6918,12 +7036,12 @@ function DesignTab() {
                                                                 })
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                            lineNumber: 597,
+                                                            lineNumber: 679,
                                                             columnNumber: 23
                                                         }, this)
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                        lineNumber: 596,
+                                                        lineNumber: 678,
                                                         columnNumber: 21
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6944,36 +7062,36 @@ function DesignTab() {
                                                                 })
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                            lineNumber: 611,
+                                                            lineNumber: 693,
                                                             columnNumber: 23
                                                         }, this)
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                        lineNumber: 610,
+                                                        lineNumber: 692,
                                                         columnNumber: 21
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                lineNumber: 595,
+                                                lineNumber: 677,
                                                 columnNumber: 19
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 561,
+                                        lineNumber: 643,
                                         columnNumber: 17
                                     }, this) : null
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 538,
+                                lineNumber: 620,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 532,
+                        lineNumber: 614,
                         columnNumber: 11
                     }, this) : null,
                     showStroke && single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -6993,7 +7111,7 @@ function DesignTab() {
                                         })
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 635,
+                                    lineNumber: 717,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7006,7 +7124,7 @@ function DesignTab() {
                                                     children: "W"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 642,
+                                                    lineNumber: 724,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -7023,13 +7141,13 @@ function DesignTab() {
                                                         })
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 643,
+                                                    lineNumber: 725,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 641,
+                                            lineNumber: 723,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -7048,29 +7166,29 @@ function DesignTab() {
                                                     children: d.label
                                                 }, d.value, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 662,
+                                                    lineNumber: 744,
                                                     columnNumber: 21
                                                 }, this))
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 653,
+                                            lineNumber: 735,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 640,
+                                    lineNumber: 722,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                            lineNumber: 634,
+                            lineNumber: 716,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 633,
+                        lineNumber: 715,
                         columnNumber: 11
                     }, this) : null,
                     single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -7089,7 +7207,7 @@ function DesignTab() {
                                                     children: "Drop shadow"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 678,
+                                                    lineNumber: 760,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$switch$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Switch"], {
@@ -7110,13 +7228,13 @@ function DesignTab() {
                                                         })
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 679,
+                                                    lineNumber: 761,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 677,
+                                            lineNumber: 759,
                                             columnNumber: 17
                                         }, this),
                                         single.shadow ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7129,7 +7247,7 @@ function DesignTab() {
                                                             children: "X"
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                            lineNumber: 695,
+                                                            lineNumber: 777,
                                                             columnNumber: 23
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -7147,13 +7265,13 @@ function DesignTab() {
                                                                 })
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                            lineNumber: 696,
+                                                            lineNumber: 778,
                                                             columnNumber: 23
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 694,
+                                                    lineNumber: 776,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7163,7 +7281,7 @@ function DesignTab() {
                                                             children: "Y"
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                            lineNumber: 709,
+                                                            lineNumber: 791,
                                                             columnNumber: 23
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -7181,13 +7299,13 @@ function DesignTab() {
                                                                 })
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                            lineNumber: 710,
+                                                            lineNumber: 792,
                                                             columnNumber: 23
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 708,
+                                                    lineNumber: 790,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7197,7 +7315,7 @@ function DesignTab() {
                                                             children: "B"
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                            lineNumber: 723,
+                                                            lineNumber: 805,
                                                             columnNumber: 23
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -7216,13 +7334,13 @@ function DesignTab() {
                                                                 })
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                            lineNumber: 724,
+                                                            lineNumber: 806,
                                                             columnNumber: 23
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 722,
+                                                    lineNumber: 804,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7243,24 +7361,24 @@ function DesignTab() {
                                                             })
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                        lineNumber: 738,
+                                                        lineNumber: 820,
                                                         columnNumber: 23
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 737,
+                                                    lineNumber: 819,
                                                     columnNumber: 21
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 693,
+                                            lineNumber: 775,
                                             columnNumber: 19
                                         }, this) : null
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 676,
+                                    lineNumber: 758,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7270,7 +7388,7 @@ function DesignTab() {
                                             children: "¤"
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 755,
+                                            lineNumber: 837,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7278,7 +7396,7 @@ function DesignTab() {
                                             children: "Layer blur"
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 756,
+                                            lineNumber: 838,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -7295,24 +7413,24 @@ function DesignTab() {
                                                 })
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 757,
+                                            lineNumber: 839,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 754,
+                                    lineNumber: 836,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                            lineNumber: 675,
+                            lineNumber: 757,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 674,
+                        lineNumber: 756,
                         columnNumber: 11
                     }, this) : null,
                     showPolygon && single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -7324,7 +7442,7 @@ function DesignTab() {
                                     children: "N"
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 773,
+                                    lineNumber: 855,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -7342,7 +7460,7 @@ function DesignTab() {
                                         })
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 774,
+                                    lineNumber: 856,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7350,18 +7468,18 @@ function DesignTab() {
                                     children: "sides"
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 782,
+                                    lineNumber: 864,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                            lineNumber: 772,
+                            lineNumber: 854,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 771,
+                        lineNumber: 853,
                         columnNumber: 11
                     }, this) : null,
                     showStar && single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -7376,7 +7494,7 @@ function DesignTab() {
                                             children: "N"
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 790,
+                                            lineNumber: 872,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -7394,7 +7512,7 @@ function DesignTab() {
                                                 })
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 791,
+                                            lineNumber: 873,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7402,13 +7520,13 @@ function DesignTab() {
                                             children: "points"
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 799,
+                                            lineNumber: 881,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 789,
+                                    lineNumber: 871,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7418,7 +7536,7 @@ function DesignTab() {
                                             children: "R"
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 802,
+                                            lineNumber: 884,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$slider$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Slider"], {
@@ -7448,7 +7566,7 @@ function DesignTab() {
                                             }
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 803,
+                                            lineNumber: 885,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7459,24 +7577,24 @@ function DesignTab() {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 821,
+                                            lineNumber: 903,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 801,
+                                    lineNumber: 883,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                            lineNumber: 788,
+                            lineNumber: 870,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 787,
+                        lineNumber: 869,
                         columnNumber: 11
                     }, this) : null,
                     showArrowHeads && single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -7503,12 +7621,12 @@ function DesignTab() {
                                             ]
                                         }, h.value, true, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 842,
+                                            lineNumber: 924,
                                             columnNumber: 19
                                         }, this))
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 833,
+                                    lineNumber: 915,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -7530,23 +7648,23 @@ function DesignTab() {
                                             ]
                                         }, h.value, true, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 856,
+                                            lineNumber: 938,
                                             columnNumber: 19
                                         }, this))
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 847,
+                                    lineNumber: 929,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                            lineNumber: 832,
+                            lineNumber: 914,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 831,
+                        lineNumber: 913,
                         columnNumber: 11
                     }, this) : null,
                     showText && single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -7570,12 +7688,12 @@ function DesignTab() {
                                             children: f
                                         }, f, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 878,
+                                            lineNumber: 960,
                                             columnNumber: 19
                                         }, this))
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 869,
+                                    lineNumber: 951,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7588,7 +7706,7 @@ function DesignTab() {
                                                     children: "Aa"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 885,
+                                                    lineNumber: 967,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -7604,13 +7722,13 @@ function DesignTab() {
                                                         })
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 886,
+                                                    lineNumber: 968,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 884,
+                                            lineNumber: 966,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7620,7 +7738,7 @@ function DesignTab() {
                                                     children: "LH"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 894,
+                                                    lineNumber: 976,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -7637,19 +7755,19 @@ function DesignTab() {
                                                         })
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 895,
+                                                    lineNumber: 977,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 893,
+                                            lineNumber: 975,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 883,
+                                    lineNumber: 965,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7662,7 +7780,7 @@ function DesignTab() {
                                                     children: "VA"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 908,
+                                                    lineNumber: 990,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$ui$2f$NumberField$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["NumberField"], {
@@ -7678,13 +7796,13 @@ function DesignTab() {
                                                         })
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 909,
+                                                    lineNumber: 991,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 907,
+                                            lineNumber: 989,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -7703,18 +7821,18 @@ function DesignTab() {
                                                     children: c.label
                                                 }, c.value, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 927,
+                                                    lineNumber: 1009,
                                                     columnNumber: 21
                                                 }, this))
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 918,
+                                            lineNumber: 1000,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 906,
+                                    lineNumber: 988,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7736,12 +7854,12 @@ function DesignTab() {
                                                     children: w.label
                                                 }, w.value, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 943,
+                                                    lineNumber: 1025,
                                                     columnNumber: 21
                                                 }, this))
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 934,
+                                            lineNumber: 1016,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7783,23 +7901,23 @@ function DesignTab() {
                                                         "aria-hidden": true
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                        lineNumber: 970,
+                                                        lineNumber: 1052,
                                                         columnNumber: 23
                                                     }, this)
                                                 }, a, false, {
                                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                                    lineNumber: 956,
+                                                    lineNumber: 1038,
                                                     columnNumber: 21
                                                 }, this))
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 948,
+                                            lineNumber: 1030,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 933,
+                                    lineNumber: 1015,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7820,7 +7938,7 @@ function DesignTab() {
                                             children: "Underline"
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 976,
+                                            lineNumber: 1058,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -7838,7 +7956,7 @@ function DesignTab() {
                                             children: "Strike"
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 988,
+                                            lineNumber: 1070,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -7856,13 +7974,13 @@ function DesignTab() {
                                             children: "Auto"
                                         }, void 0, false, {
                                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                            lineNumber: 1000,
+                                            lineNumber: 1082,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 975,
+                                    lineNumber: 1057,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -7872,18 +7990,18 @@ function DesignTab() {
                                     children: "Edit text"
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 1013,
+                                    lineNumber: 1095,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                            lineNumber: 868,
+                            lineNumber: 950,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 867,
+                        lineNumber: 949,
                         columnNumber: 11
                     }, this) : null,
                     showClip && single ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -7896,7 +8014,7 @@ function DesignTab() {
                                     children: "Clip content"
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 1028,
+                                    lineNumber: 1110,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$switch$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Switch"], {
@@ -7912,18 +8030,18 @@ function DesignTab() {
                                         })
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 1029,
+                                    lineNumber: 1111,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                            lineNumber: 1027,
+                            lineNumber: 1109,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1026,
+                        lineNumber: 1108,
                         columnNumber: 11
                     }, this) : null,
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -7939,7 +8057,7 @@ function DesignTab() {
                                         children: "PNG 1x"
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 1042,
+                                        lineNumber: 1124,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -7949,7 +8067,7 @@ function DesignTab() {
                                         children: "PNG 2x"
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 1049,
+                                        lineNumber: 1131,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -7959,13 +8077,13 @@ function DesignTab() {
                                         children: "SVG"
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 1056,
+                                        lineNumber: 1138,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 1041,
+                                lineNumber: 1123,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -7973,29 +8091,29 @@ function DesignTab() {
                                 children: "Exports the current selection"
                             }, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 1064,
+                                lineNumber: 1146,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1040,
+                        lineNumber: 1122,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 322,
+                lineNumber: 404,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-        lineNumber: 303,
+        lineNumber: 385,
         columnNumber: 5
     }, this);
 }
-_s(DesignTab, "r2IiWLz4ti4pgBlYU6oGiXzPtpM=", false, function() {
+_s2(DesignTab, "r2IiWLz4ti4pgBlYU6oGiXzPtpM=", false, function() {
     return [
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"],
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"],
@@ -8004,7 +8122,7 @@ _s(DesignTab, "r2IiWLz4ti4pgBlYU6oGiXzPtpM=", false, function() {
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"]
     ];
 });
-_c3 = DesignTab;
+_c5 = DesignTab;
 /* ------------------------------------------------------------------ */ /* Panel chrome (Figma UI3 header: avatar · present · Share, tabs,     */ /* zoom dropdown) + frame presets + inspect + prototype views          */ /* ------------------------------------------------------------------ */ const ZOOM_PRESETS = [
     {
         label: '25%',
@@ -8036,7 +8154,7 @@ _c3 = DesignTab;
     }
 ];
 function ZoomDropdown() {
-    _s1();
+    _s3();
     const zoom = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"])({
         "ZoomDropdown.useIris[zoom]": (s)=>s.viewport.zoom
     }["ZoomDropdown.useIris[zoom]"]);
@@ -8097,13 +8215,13 @@ function ZoomDropdown() {
                         "aria-hidden": true
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1122,
+                        lineNumber: 1204,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1112,
+                lineNumber: 1194,
                 columnNumber: 7
             }, this),
             open ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -8126,22 +8244,22 @@ function ZoomDropdown() {
                         children: zp.label
                     }, zp.label, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1132,
+                        lineNumber: 1214,
                         columnNumber: 13
                     }, this))
             }, void 0, false, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1125,
+                lineNumber: 1207,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-        lineNumber: 1111,
+        lineNumber: 1193,
         columnNumber: 5
     }, this);
 }
-_s1(ZoomDropdown, "1zuT3RY/sFP4+ZWdAXB2a6MG34w=", false, function() {
+_s3(ZoomDropdown, "1zuT3RY/sFP4+ZWdAXB2a6MG34w=", false, function() {
     return [
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"],
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"],
@@ -8149,9 +8267,9 @@ _s1(ZoomDropdown, "1zuT3RY/sFP4+ZWdAXB2a6MG34w=", false, function() {
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"]
     ];
 });
-_c4 = ZoomDropdown;
+_c6 = ZoomDropdown;
 function AccountMenu() {
-    _s2();
+    _s4();
     const [open, setOpen] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const ref = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
     const goHome = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"])({
@@ -8203,7 +8321,7 @@ function AccountMenu() {
                         children: "TU"
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1186,
+                        lineNumber: 1268,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$chevron$2d$down$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__ChevronDown$3e$__["ChevronDown"], {
@@ -8213,13 +8331,13 @@ function AccountMenu() {
                         className: "text-[#9A9A9A]"
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1189,
+                        lineNumber: 1271,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1177,
+                lineNumber: 1259,
                 columnNumber: 7
             }, this),
             open ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -8238,7 +8356,7 @@ function AccountMenu() {
                                 children: "TU"
                             }, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 1199,
+                                lineNumber: 1281,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -8249,7 +8367,7 @@ function AccountMenu() {
                                         children: "Test User"
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 1203,
+                                        lineNumber: 1285,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -8257,26 +8375,26 @@ function AccountMenu() {
                                         children: "you@iris.studio"
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 1204,
+                                        lineNumber: 1286,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 1202,
+                                lineNumber: 1284,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1198,
+                        lineNumber: 1280,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         className: "my-1 h-px bg-[#3E3E3E]"
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1207,
+                        lineNumber: 1289,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -8284,14 +8402,14 @@ function AccountMenu() {
                         children: "Free plan · local-first preview"
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1208,
+                        lineNumber: 1290,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         className: "my-1 h-px bg-[#3E3E3E]"
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1211,
+                        lineNumber: 1293,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -8306,31 +8424,31 @@ function AccountMenu() {
                         children: "Sign out"
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1212,
+                        lineNumber: 1294,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1192,
+                lineNumber: 1274,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-        lineNumber: 1176,
+        lineNumber: 1258,
         columnNumber: 5
     }, this);
 }
-_s2(AccountMenu, "QkkMYCoXvBgkIc9BWL9vgKJOJVw=", false, function() {
+_s4(AccountMenu, "QkkMYCoXvBgkIc9BWL9vgKJOJVw=", false, function() {
     return [
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"],
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"]
     ];
 });
-_c5 = AccountMenu;
+_c7 = AccountMenu;
 /** Frame size presets shown while the Frame tool is active (Figma behavior). */ function FramePresets() {
-    _s3();
+    _s5();
     const tool = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"])({
         "FramePresets.useIris[tool]": (s)=>s.tool
     }["FramePresets.useIris[tool]"]);
@@ -8356,7 +8474,7 @@ _c5 = AccountMenu;
                                         children: p.name
                                     }, void 0, false, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 1249,
+                                        lineNumber: 1331,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -8368,23 +8486,23 @@ _c5 = AccountMenu;
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                        lineNumber: 1250,
+                                        lineNumber: 1332,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, p.id, true, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 1243,
+                                lineNumber: 1325,
                                 columnNumber: 15
                             }, this))
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1241,
+                        lineNumber: 1323,
                         columnNumber: 11
                     }, this)
                 }, g, false, {
                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                    lineNumber: 1240,
+                    lineNumber: 1322,
                     columnNumber: 9
                 }, this)),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -8393,30 +8511,30 @@ _c5 = AccountMenu;
                     children: "Click a preset to drop it at the center of the view, or drag on the canvas for a custom size."
                 }, void 0, false, {
                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                    lineNumber: 1259,
+                    lineNumber: 1341,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1258,
+                lineNumber: 1340,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-        lineNumber: 1238,
+        lineNumber: 1320,
         columnNumber: 5
     }, this);
 }
-_s3(FramePresets, "gkjsFnhQssleVTa25HAnaSLMmyA=", false, function() {
+_s5(FramePresets, "gkjsFnhQssleVTa25HAnaSLMmyA=", false, function() {
     return [
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"],
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"]
     ];
 });
-_c6 = FramePresets;
+_c8 = FramePresets;
 /** Dev-mode inspect tab: SVG markup of the current selection. */ function InspectTab() {
-    _s4();
+    _s6();
     const selection = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"])({
         "InspectTab.useIris[selection]": (s)=>s.selection
     }["InspectTab.useIris[selection]"]);
@@ -8435,19 +8553,19 @@ _c6 = FramePresets;
                     "Inspect mode shows the SVG markup of your selection.",
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("br", {}, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1281,
+                        lineNumber: 1363,
                         columnNumber: 11
                     }, this),
                     "Select an object on the canvas to inspect its code."
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1279,
+                lineNumber: 1361,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-            lineNumber: 1278,
+            lineNumber: 1360,
             columnNumber: 7
         }, this);
     }
@@ -8459,12 +8577,12 @@ _c6 = FramePresets;
                 children: "This selection cannot be serialized to SVG."
             }, void 0, false, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1290,
+                lineNumber: 1372,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-            lineNumber: 1289,
+            lineNumber: 1371,
             columnNumber: 7
         }, this);
     }
@@ -8479,7 +8597,7 @@ _c6 = FramePresets;
                         children: "SVG"
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1297,
+                        lineNumber: 1379,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -8491,13 +8609,13 @@ _c6 = FramePresets;
                         children: "Copy"
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1298,
+                        lineNumber: 1380,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1296,
+                lineNumber: 1378,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("pre", {
@@ -8505,24 +8623,24 @@ _c6 = FramePresets;
                 children: svg
             }, void 0, false, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1311,
+                lineNumber: 1393,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-        lineNumber: 1295,
+        lineNumber: 1377,
         columnNumber: 5
     }, this);
 }
-_s4(InspectTab, "Uqa9tQl18NcjgxtZdRg5/uWjlBE=", false, function() {
+_s6(InspectTab, "Uqa9tQl18NcjgxtZdRg5/uWjlBE=", false, function() {
     return [
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"]
     ];
 });
-_c7 = InspectTab;
+_c9 = InspectTab;
 /** Prototype tab: presentation controls. */ function PrototypeTab() {
-    _s5();
+    _s7();
     const doc = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"])({
         "PrototypeTab.useIris[doc]": (s)=>s.doc
     }["PrototypeTab.useIris[doc]"]);
@@ -8551,7 +8669,7 @@ _c7 = InspectTab;
                                 "aria-hidden": true
                             }, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 1336,
+                                lineNumber: 1418,
                                 columnNumber: 11
                             }, this),
                             "Present ",
@@ -8559,7 +8677,7 @@ _c7 = InspectTab;
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1331,
+                        lineNumber: 1413,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -8567,13 +8685,13 @@ _c7 = InspectTab;
                         children: "Present your frames full-screen. Use ← → to move between frames, Esc to exit. Also Ctrl+Enter anywhere."
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1339,
+                        lineNumber: 1421,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1330,
+                lineNumber: 1412,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Section, {
@@ -8583,7 +8701,7 @@ _c7 = InspectTab;
                     children: "No frames on this page yet. Press F and drag to create your first screen."
                 }, void 0, false, {
                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                    lineNumber: 1346,
+                    lineNumber: 1428,
                     columnNumber: 11
                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("ol", {
                     className: "flex flex-col gap-1",
@@ -8595,7 +8713,7 @@ _c7 = InspectTab;
                                     children: i + 1
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 1356,
+                                    lineNumber: 1438,
                                     columnNumber: 17
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -8603,7 +8721,7 @@ _c7 = InspectTab;
                                     children: f.name
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 1359,
+                                    lineNumber: 1441,
                                     columnNumber: 17
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -8615,42 +8733,42 @@ _c7 = InspectTab;
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 1360,
+                                    lineNumber: 1442,
                                     columnNumber: 17
                                 }, this)
                             ]
                         }, f.id, true, {
                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                            lineNumber: 1352,
+                            lineNumber: 1434,
                             columnNumber: 15
                         }, this))
                 }, void 0, false, {
                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                    lineNumber: 1350,
+                    lineNumber: 1432,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1344,
+                lineNumber: 1426,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-        lineNumber: 1329,
+        lineNumber: 1411,
         columnNumber: 5
     }, this);
 }
-_s5(PrototypeTab, "XKDMzJYxCWXVk+NTd68Y/TuPkUE=", false, function() {
+_s7(PrototypeTab, "XKDMzJYxCWXVk+NTd68Y/TuPkUE=", false, function() {
     return [
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"],
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"],
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"]
     ];
 });
-_c8 = PrototypeTab;
+_c10 = PrototypeTab;
 function PropertiesPanel() {
-    _s6();
+    _s8();
     const rightTab = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"])({
         "PropertiesPanel.useIris[rightTab]": (s)=>s.rightTab
     }["PropertiesPanel.useIris[rightTab]"]);
@@ -8684,7 +8802,7 @@ function PropertiesPanel() {
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(AccountMenu, {}, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1388,
+                        lineNumber: 1470,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -8699,12 +8817,12 @@ function PropertiesPanel() {
                             "aria-hidden": true
                         }, void 0, false, {
                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                            lineNumber: 1396,
+                            lineNumber: 1478,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1389,
+                        lineNumber: 1471,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -8719,20 +8837,20 @@ function PropertiesPanel() {
                                 "aria-hidden": true
                             }, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 1404,
+                                lineNumber: 1486,
                                 columnNumber: 11
                             }, this),
                             "Share"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1398,
+                        lineNumber: 1480,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1387,
+                lineNumber: 1469,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -8754,13 +8872,13 @@ function PropertiesPanel() {
                                     "aria-hidden": true
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 1424,
+                                    lineNumber: 1506,
                                     columnNumber: 15
                                 }, this) : null
                             ]
                         }, t, true, {
                             fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                            lineNumber: 1412,
+                            lineNumber: 1494,
                             columnNumber: 11
                         }, this)),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -8780,63 +8898,63 @@ function PropertiesPanel() {
                                     "aria-hidden": true
                                 }, void 0, false, {
                                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                    lineNumber: 1438,
+                                    lineNumber: 1520,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 1429,
+                                lineNumber: 1511,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(ZoomDropdown, {}, void 0, false, {
                                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                                lineNumber: 1440,
+                                lineNumber: 1522,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                        lineNumber: 1428,
+                        lineNumber: 1510,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1410,
+                lineNumber: 1492,
                 columnNumber: 7
             }, this),
             inspectMode ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(InspectTab, {}, void 0, false, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1446,
+                lineNumber: 1528,
                 columnNumber: 9
             }, this) : rightTab === 'prototype' ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(PrototypeTab, {}, void 0, false, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1448,
+                lineNumber: 1530,
                 columnNumber: 9
             }, this) : tool === 'frame' || tool === 'section' ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                 className: "iris-scroll flex min-h-0 flex-1 flex-col overflow-y-auto",
                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(FramePresets, {}, void 0, false, {
                     fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                    lineNumber: 1451,
+                    lineNumber: 1533,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1450,
+                lineNumber: 1532,
                 columnNumber: 9
             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(DesignTab, {}, void 0, false, {
                 fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-                lineNumber: 1454,
+                lineNumber: 1536,
                 columnNumber: 9
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/iris/ui/PropertiesPanel.tsx",
-        lineNumber: 1385,
+        lineNumber: 1467,
         columnNumber: 5
     }, this);
 }
-_s6(PropertiesPanel, "Tdy49u7Vw/Q/Cdwv+/9yLobz1kA=", false, function() {
+_s8(PropertiesPanel, "Tdy49u7Vw/Q/Cdwv+/9yLobz1kA=", false, function() {
     return [
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"],
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"],
@@ -8848,18 +8966,20 @@ _s6(PropertiesPanel, "Tdy49u7Vw/Q/Cdwv+/9yLobz1kA=", false, function() {
         __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$iris$2f$engine$2f$store$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useIris"]
     ];
 });
-_c9 = PropertiesPanel;
-var _c, _c1, _c2, _c3, _c4, _c5, _c6, _c7, _c8, _c9;
+_c11 = PropertiesPanel;
+var _c, _c1, _c2, _c3, _c4, _c5, _c6, _c7, _c8, _c9, _c10, _c11;
 __turbopack_context__.k.register(_c, "Section");
-__turbopack_context__.k.register(_c1, "FieldLabel");
-__turbopack_context__.k.register(_c2, "IconBtn");
-__turbopack_context__.k.register(_c3, "DesignTab");
-__turbopack_context__.k.register(_c4, "ZoomDropdown");
-__turbopack_context__.k.register(_c5, "AccountMenu");
-__turbopack_context__.k.register(_c6, "FramePresets");
-__turbopack_context__.k.register(_c7, "InspectTab");
-__turbopack_context__.k.register(_c8, "PrototypeTab");
-__turbopack_context__.k.register(_c9, "PropertiesPanel");
+__turbopack_context__.k.register(_c1, "CollapsibleSection");
+__turbopack_context__.k.register(_c2, "StyleSwatches");
+__turbopack_context__.k.register(_c3, "FieldLabel");
+__turbopack_context__.k.register(_c4, "IconBtn");
+__turbopack_context__.k.register(_c5, "DesignTab");
+__turbopack_context__.k.register(_c6, "ZoomDropdown");
+__turbopack_context__.k.register(_c7, "AccountMenu");
+__turbopack_context__.k.register(_c8, "FramePresets");
+__turbopack_context__.k.register(_c9, "InspectTab");
+__turbopack_context__.k.register(_c10, "PrototypeTab");
+__turbopack_context__.k.register(_c11, "PropertiesPanel");
 if (typeof globalThis.$RefreshHelpers$ === 'object' && globalThis.$RefreshHelpers !== null) {
     __turbopack_context__.k.registerExports(__turbopack_context__.m, globalThis.$RefreshHelpers$);
 }
