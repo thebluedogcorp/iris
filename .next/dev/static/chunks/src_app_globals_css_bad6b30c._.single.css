@@ -10,7 +10,6 @@
       --tw-rotate-z: initial;
       --tw-skew-x: initial;
       --tw-skew-y: initial;
-      --tw-space-y-reverse: 0;
       --tw-space-x-reverse: 0;
       --tw-border-style: solid;
       --tw-gradient-position: initial;
@@ -2144,12 +2143,6 @@
 
   .gap-12 {
     gap: calc(var(--spacing) * 12);
-  }
-
-  :where(.space-y-1\.5 > :not(:last-child)) {
-    --tw-space-y-reverse: 0;
-    margin-block-start: calc(calc(var(--spacing) * 1.5) * var(--tw-space-y-reverse));
-    margin-block-end: calc(calc(var(--spacing) * 1.5) * calc(1 - var(--tw-space-y-reverse)));
   }
 
   .gap-x-3 {
@@ -7305,7 +7298,7 @@
   --card-foreground: #fff;
   --popover: #2c2c2c;
   --popover-foreground: #fff;
-  --primary: #8b5cf6;
+  --primary: #0d99ff;
   --primary-foreground: #fff;
   --secondary: #383838;
   --secondary-foreground: #fff;
@@ -7316,7 +7309,7 @@
   --destructive: #f24822;
   --border: #3e3e3e;
   --input: #3e3e3e;
-  --ring: #8b5cf6;
+  --ring: #0d99ff;
   --radius: .375rem;
   --iris-bg: #1e1e1e;
   --iris-panel: #2c2c2c;
@@ -7330,10 +7323,10 @@
   --iris-text-2: #c9c9c9;
   --iris-text-3: #9a9a9a;
   --iris-text-4: #6f6f6f;
-  --iris-accent: #8b5cf6;
-  --iris-accent-hover: #7c3aed;
-  --iris-accent-soft: #8b5cf629;
-  --iris-accent-line: #8b5cf6;
+  --iris-accent: #0d99ff;
+  --iris-accent-hover: #0b87e0;
+  --iris-accent-soft: #0d99ff29;
+  --iris-accent-line: #0d99ff;
   --iris-danger: #f24822;
   --iris-snap: #ff3b30;
   --iris-input: #ffffff12;
@@ -7572,12 +7565,6 @@ html {
 @property --tw-skew-y {
   syntax: "*";
   inherits: false
-}
-
-@property --tw-space-y-reverse {
-  syntax: "*";
-  inherits: false;
-  initial-value: 0;
 }
 
 @property --tw-space-x-reverse {
