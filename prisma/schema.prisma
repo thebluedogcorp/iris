@@ -1,0 +1,18 @@
+// Iris — Prisma schema
+//
+// Iris is local-first by design: the studio stores documents in the browser
+// (localStorage + .iris files) and does not need a database today. This file
+// is intentionally minimal so the repo still runs `prisma generate` cleanly.
+//
+// ROADMAP — the "Iris Cloud" milestone introduces optional sync & backup and
+// will add the first server-side models here (Account, Workspace,
+// SharedDocument, …) behind NextAuth.js (Google OAuth) sessions.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
