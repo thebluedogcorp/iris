@@ -9,9 +9,11 @@ import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import {
   ID,
+  IrisComment,
   IrisDoc,
   IrisNode,
   NodeType,
+  FramePreset,
   createDefaultDoc,
   createNode,
   createPage,
@@ -67,7 +69,12 @@ export type Tool =
   | 'star'
   | 'arrow'
   | 'eyedropper'
-  | 'image';
+  | 'image'
+  | 'scale'
+  | 'section'
+  | 'slice'
+  | 'pencil'
+  | 'comment';
 
 export type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom' | 'hdist' | 'vdist';
 
@@ -102,6 +109,10 @@ export interface ViewFlags {
   outline: boolean;
 }
 
+export type LeftPanelView = 'layers' | 'assets' | 'comments';
+
+export type RightPanelTab = 'design' | 'prototype';
+
 export interface ToastAction {
   label: string;
   run: () => void;
@@ -134,6 +145,23 @@ export interface IrisStore {
   canvasSize: { w: number; h: number };
   /** copied style payload for copy/paste style */
   styleClipboard: Partial<IrisNode> | null;
+
+  /* editor chrome state */
+  /** fullscreen prototype presentation */
+  presenting: boolean;
+  /** dev/inspect mode (SVG code panel) */
+  inspectMode: boolean;
+  /** share dialog open */
+  shareOpen: boolean;
+  /** active left-panel view */
+  leftPanelView: LeftPanelView;
+  leftPanelOpen: boolean;
+  /** comment pin being edited */
+  activeCommentId: ID | null;
+  /** show comment pins on canvas */
+  showComments: boolean;
+  /** right panel tab (design / prototype) */
+  rightTab: RightPanelTab;
 
   /* tool / view */
   setTool: (tool: Tool) => void;
@@ -243,6 +271,24 @@ export interface IrisStore {
   closeContextMenu: () => void;
   setExportOpen: (open: boolean) => void;
   setShortcutsOpen: (open: boolean) => void;
+
+  /* comments */
+  addComment: (x: number, y: number, text: string) => ID;
+  updateComment: (id: ID, patch: Partial<IrisComment>) => void;
+  deleteComment: (id: ID) => void;
+  setActiveComment: (id: ID | null) => void;
+  setShowComments: (v: boolean) => void;
+
+  /* editor chrome */
+  setPresenting: (v: boolean) => void;
+  setInspectMode: (v: boolean) => void;
+  setShareOpen: (v: boolean) => void;
+  setLeftPanelView: (view: LeftPanelView, toggle?: boolean) => void;
+  toggleLeftPanel: () => void;
+  setRightTab: (tab: RightPanelTab) => void;
+
+  /* frame presets */
+  addFramePreset: (preset: FramePreset) => ID;
 }
 
 /* ------------------------------------------------------------------ */
@@ -267,6 +313,7 @@ function draftOf(doc: IrisDoc): IrisDoc {
       guidesX: [...doc.settings.guidesX],
       guidesY: [...doc.settings.guidesY],
     },
+    comments: doc.comments ? doc.comments.map((c) => ({ ...c })) : [],
   };
 }
 
@@ -551,6 +598,100 @@ export const useIris = create<IrisStore>()((set, get) => {
     dirty: false,
     canvasSize: { w: 800, h: 600 },
     styleClipboard: null,
+    presenting: false,
+    inspectMode: false,
+    shareOpen: false,
+    leftPanelView: 'layers',
+    leftPanelOpen: true,
+    activeCommentId: null,
+    showComments: true,
+    rightTab: 'design',
+
+    setLeftPanelView: (view, toggle) =>
+      set((s) => {
+        if (toggle && s.leftPanelView === view && s.leftPanelOpen) return { leftPanelOpen: false };
+        return { leftPanelView: view, leftPanelOpen: true };
+      }),
+    toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
+    setRightTab: (tab) => set({ rightTab: tab }),
+    setPresenting: (v) => set({ presenting: v }),
+    setInspectMode: (v) => set({ inspectMode: v }),
+    setShareOpen: (v) => set({ shareOpen: v }),
+
+    /* ------------------------- comments ---------------------------- */
+    addComment: (x, y, text) => {
+      const c: IrisComment = {
+        id: `cm${Math.random().toString(36).slice(2, 10)}`,
+        pageId: get().currentPageId,
+        x,
+        y,
+        text,
+        author: 'You',
+        ts: Date.now(),
+        resolved: false,
+      };
+      commit(
+        (draft) => {
+          draft.comments = [...draft.comments, c];
+        },
+        { history: 'comment' },
+      );
+      return c.id;
+    },
+    updateComment: (id, patch) => {
+      commit(
+        (draft) => {
+          draft.comments = draft.comments.map((c) => (c.id === id ? { ...c, ...patch } : c));
+        },
+        { history: 'comment' },
+      );
+    },
+    deleteComment: (id) => {
+      commit(
+        (draft) => {
+          draft.comments = draft.comments.filter((c) => c.id !== id);
+        },
+        { history: 'comment' },
+      );
+      set((s) => (s.activeCommentId === id ? { activeCommentId: null } : {}));
+    },
+    setActiveComment: (id) => set({ activeCommentId: id }),
+    setShowComments: (v) => set({ showComments: v }),
+
+    /* ------------------------ frame presets ------------------------ */
+    addFramePreset: (preset) => {
+      // presets always land at the top level of the page (Figma behavior) —
+      // centered on the current view, offset if it would overlap existing
+      // top-level frames
+      const s = get();
+      const center = viewportCenter();
+      const page = s.doc.pagesById[s.currentPageId];
+      let x = center.x - preset.w / 2;
+      let y = center.y - preset.h / 2;
+      if (page) {
+        const overlap = page.nodeIds.some((id) => {
+          const n = s.doc.nodesById[id];
+          if (!n || n.type !== 'frame') return false;
+          const b = nodeWorldAABB(s.doc, n);
+          return Math.abs(b.x - x) < 32 && Math.abs(b.y - y) < 32;
+        });
+        if (overlap) {
+          x += 60;
+          y += 60;
+        }
+      }
+      return get().addNode(
+        'frame',
+        {
+          x,
+          y,
+          w: preset.w,
+          h: preset.h,
+          name: preset.name,
+        },
+        null,
+      );
+    },
 
     /* ------------------------- tool / view ------------------------- */
     setTool: (tool) => {

@@ -53,7 +53,7 @@ function Segmented<T extends string | number>({
             disabled={o.disabled}
             className={`h-7 flex-1 rounded text-[11px] transition-colors disabled:pointer-events-none disabled:opacity-40 ${
               active
-                ? 'bg-[#8B5CF6] text-white'
+                ? 'bg-[#0D99FF] text-white'
                 : 'text-[#C9C9C9] hover:bg-[#383838] hover:text-white'
             }`}
             onClick={() => onChange(o.value)}
@@ -162,7 +162,7 @@ function ExportDialogBody() {
             <Switch
               checked={transparent}
               aria-label="Transparent background"
-              className="data-[state=checked]:bg-[#8B5CF6] data-[state=unchecked]:bg-[#383838]"
+              className="data-[state=checked]:bg-[#0D99FF] data-[state=unchecked]:bg-[#383838]"
               onCheckedChange={setTransparent}
             />
           </div>
@@ -186,7 +186,7 @@ function ExportDialogBody() {
         </Button>
         <Button
           type="button"
-          className="h-8 rounded-md bg-[#8B5CF6] px-4 text-[12px] text-white hover:bg-[#7C3AED]"
+          className="h-8 rounded-md bg-[#0D99FF] px-4 text-[12px] text-white hover:bg-[#0B87E0]"
           disabled={!hasContent}
           onClick={doExport}
         >

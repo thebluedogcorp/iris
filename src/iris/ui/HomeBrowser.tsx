@@ -109,7 +109,7 @@ function formatBytes(bytes: number): string {
 function IrisMark({ size = 20, className = '' }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true" focusable="false" className={className}>
-      <g fill="#8B5CF6">
+      <g fill="#0D99FF">
         <ellipse cx="8" cy="4.6" rx="2.7" ry="4.5" />
         <ellipse cx="8" cy="4.6" rx="2.7" ry="4.5" transform="rotate(120 8 8)" />
         <ellipse cx="8" cy="4.6" rx="2.7" ry="4.5" transform="rotate(240 8 8)" />
@@ -199,7 +199,7 @@ function AccountChip() {
         <button
           type="button"
           aria-label={`Account: ${session.name}`}
-          className="flex size-8 items-center justify-center rounded-full bg-[#8B5CF6] text-[11px] font-semibold text-white ring-offset-2 ring-offset-[#1E1E1E] transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8B5CF6]"
+          className="flex size-8 items-center justify-center rounded-full bg-[#0D99FF] text-[11px] font-semibold text-white ring-offset-2 ring-offset-[#1E1E1E] transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0D99FF]"
         >
           {initials}
         </button>
@@ -377,7 +377,7 @@ export function HomeBrowser() {
             placeholder="Search files"
             aria-label="Search files"
             spellCheck={false}
-            className="h-8 w-full rounded-md border border-transparent bg-[#2C2C2C] pl-8 pr-8 text-[12px] text-white caret-[#8B5CF6] transition-colors placeholder:text-[#7A7A7A] focus:border-[#4E4E4E] focus:outline-none"
+            className="h-8 w-full rounded-md border border-transparent bg-[#2C2C2C] pl-8 pr-8 text-[12px] text-white caret-[#0D99FF] transition-colors placeholder:text-[#7A7A7A] focus:border-[#4E4E4E] focus:outline-none"
           />
           {query ? (
             <button
@@ -411,7 +411,7 @@ export function HomeBrowser() {
           <button
             type="button"
             onClick={createNew}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#8B5CF6] px-2.5 text-[12px] font-medium text-white transition-colors hover:bg-[#7C4DF3] sm:px-3"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0D99FF] px-2.5 text-[12px] font-medium text-white transition-colors hover:bg-[#7C4DF3] sm:px-3"
           >
             <Plus className="size-3.5" aria-hidden="true" />
             <span className="hidden sm:inline">New design file</span>
@@ -528,9 +528,9 @@ export function HomeBrowser() {
                   <button
                     type="button"
                     onClick={createNew}
-                    className="group flex h-20 flex-col items-start justify-between rounded-lg border border-dashed border-[#4E4E4E] p-2.5 text-left transition-colors hover:border-[#8B5CF6] hover:bg-[#2C2C2C]"
+                    className="group flex h-20 flex-col items-start justify-between rounded-lg border border-dashed border-[#4E4E4E] p-2.5 text-left transition-colors hover:border-[#0D99FF] hover:bg-[#2C2C2C]"
                   >
-                    <Plus className="size-4 text-[#9A9A9A] transition-colors group-hover:text-[#C4B5FD]" aria-hidden />
+                    <Plus className="size-4 text-[#9A9A9A] transition-colors group-hover:text-[#7EC9FF]" aria-hidden />
                     <span className="text-[12px] font-medium text-[#E5E5E5]">Blank file</span>
                   </button>
                   {TEMPLATES.map((t) => (
@@ -538,9 +538,9 @@ export function HomeBrowser() {
                       key={t.id}
                       type="button"
                       onClick={() => createFromTemplate(t.id)}
-                      className="group flex h-20 flex-col items-start justify-between rounded-lg border border-[#3E3E3E] bg-[#262626] p-2.5 text-left transition-colors hover:border-[#8B5CF6] hover:bg-[#2C2C2C]"
+                      className="group flex h-20 flex-col items-start justify-between rounded-lg border border-[#3E3E3E] bg-[#262626] p-2.5 text-left transition-colors hover:border-[#0D99FF] hover:bg-[#2C2C2C]"
                     >
-                      <span className="flex size-6 items-center justify-center rounded bg-[#8B5CF6]/15 text-[#C4B5FD]">
+                      <span className="flex size-6 items-center justify-center rounded bg-[#0D99FF]/15 text-[#7EC9FF]">
                         <TemplateGlyph id={t.id} />
                       </span>
                       <span>
@@ -588,7 +588,7 @@ export function HomeBrowser() {
                               open(entry.id);
                             }
                           }}
-                          className="group cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#8B5CF6]"
+                          className="group cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#0D99FF]"
                         >
                           <div className="relative aspect-[16/10] overflow-hidden rounded-lg border border-[#3E3E3E] bg-[#2A2A2A] transition-colors group-hover:border-[#5B5B5B] group-hover:bg-[#303030]">
                             <Thumb entry={entry} />
@@ -637,7 +637,7 @@ export function HomeBrowser() {
                               open(entry.id);
                             }
                           }}
-                          className="group flex h-14 cursor-pointer items-center gap-3 rounded-md px-2 outline-none hover:bg-[#2A2A2A] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#8B5CF6]"
+                          className="group flex h-14 cursor-pointer items-center gap-3 rounded-md px-2 outline-none hover:bg-[#2A2A2A] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0D99FF]"
                         >
                           <div className="h-10 w-16 shrink-0 overflow-hidden rounded border border-[#3E3E3E] bg-[#2A2A2A]">
                             <Thumb entry={entry} tiny />
@@ -700,7 +700,7 @@ export function HomeBrowser() {
               if (e.key === 'Enter') confirmRename();
               if (e.key === 'Escape') setRenameTarget(null);
             }}
-            className="h-8 rounded-md border-[#4E4E4E] bg-[#1E1E1E] text-[12px] text-white focus-visible:ring-[#8B5CF6]"
+            className="h-8 rounded-md border-[#4E4E4E] bg-[#1E1E1E] text-[12px] text-white focus-visible:ring-[#0D99FF]"
           />
           <DialogFooter className="gap-2">
             <button
@@ -714,7 +714,7 @@ export function HomeBrowser() {
               type="button"
               onClick={confirmRename}
               disabled={!renameDraft.trim()}
-              className="h-8 rounded-md bg-[#8B5CF6] px-3 text-[12px] font-medium text-white hover:bg-[#7C4DF3] disabled:opacity-40"
+              className="h-8 rounded-md bg-[#0D99FF] px-3 text-[12px] font-medium text-white hover:bg-[#7C4DF3] disabled:opacity-40"
             >
               Rename
             </button>
@@ -832,7 +832,7 @@ function EmptyLibrary({ onNew, onImport }: { onNew: () => void; onImport: () => 
         <button
           type="button"
           onClick={onNew}
-          className="inline-flex h-9 items-center gap-2 rounded-md bg-[#8B5CF6] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#7C4DF3]"
+          className="inline-flex h-9 items-center gap-2 rounded-md bg-[#0D99FF] px-4 text-[13px] font-medium text-white transition-colors hover:bg-[#7C4DF3]"
         >
           <Plus className="size-4" aria-hidden="true" />
           New design file

@@ -43,6 +43,8 @@ export interface OverlayState {
   penDraft: PenDraft | null;
   pathEdit: PathEditState | null;
   drawPreview: DrawPreview | null;
+  /** freehand pencil stroke points (world space) */
+  pencilDraft: { x: number; y: number }[] | null;
   cursor: string | null;
   pointerWorld: { x: number; y: number } | null;
   spaceDown: boolean;
@@ -60,6 +62,7 @@ export const overlay: OverlayState = {
   penDraft: null,
   pathEdit: null,
   drawPreview: null,
+  pencilDraft: null,
   cursor: null,
   pointerWorld: null,
   spaceDown: false,

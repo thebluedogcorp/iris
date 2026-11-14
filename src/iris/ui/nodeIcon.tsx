@@ -8,9 +8,11 @@ import {
   Image as ImageIcon,
   MoveUpRight,
   PenTool,
+  Scissors,
   Slash,
   Square,
   Star as StarIcon,
+  SquareDashed,
   Type,
   type LucideIcon,
 } from 'lucide-react';
@@ -28,6 +30,8 @@ const ICONS: Record<NodeType, LucideIcon> = {
   polygon: Hexagon,
   star: StarIcon,
   arrow: MoveUpRight,
+  section: SquareDashed,
+  slice: Scissors,
 };
 
 export function NodeTypeIcon({

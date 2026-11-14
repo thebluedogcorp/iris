@@ -22,7 +22,7 @@ import {
   cssFontFamily,
 } from './geometry';
 import { useIris } from './store';
-import { drawNodes } from './renderer';
+import { drawNodes, setExportPass } from './renderer';
 import { loadImage } from './imageCache';
 
 export type ExportScope = 'selection' | 'page';
@@ -95,8 +95,16 @@ export async function exportRaster(
   const format = opts?.format ?? 'png';
   const transparent = opts?.transparent ?? false;
   const s = useIris.getState();
-  const ids = scope === 'selection' ? s.selection : undefined;
-  const bounds = contentBounds(s.doc, s.currentPageId, ids);
+  let ids = scope === 'selection' ? s.selection : undefined;
+  let bounds = contentBounds(s.doc, s.currentPageId, ids);
+  // a selected slice exports the region it covers (contents under it)
+  if (scope === 'selection' && s.selection.length === 1) {
+    const sel = s.doc.nodesById[s.selection[0]];
+    if (sel && sel.type === 'slice') {
+      bounds = nodeWorldAABB(s.doc, sel);
+      ids = undefined;
+    }
+  }
   if (!bounds || bounds.w < 0.5 || bounds.h < 0.5) {
     s.toast(scope === 'selection' ? 'Select something to export' : 'Nothing to export on this page');
     return;
@@ -117,7 +125,12 @@ export async function exportRaster(
     ctx.fillRect(0, 0, w, h);
   }
   ctx.setTransform(scale, 0, 0, scale, -bounds.x * scale, -bounds.y * scale);
-  drawNodes(ctx, s.doc, s.currentPageId, 1, ids && ids.length ? ids : undefined);
+  setExportPass(true);
+  try {
+    drawNodes(ctx, s.doc, s.currentPageId, 1, ids && ids.length ? ids : undefined);
+  } finally {
+    setExportPass(false);
+  }
   const filename = exportFilename(format, scope);
   const mime = format === 'jpg' ? 'image/jpeg' : 'image/png';
   const quality = format === 'jpg' ? 0.92 : undefined;
@@ -249,6 +262,14 @@ function nodeToSVG(doc: IrisDoc, n: IrisNode, indent: string): string {
     const clipAttr = n.clip ? ` clip-path="url(#${clipId})"` : '';
     return `${indent}<g${transform}${op}${clipAttr}${blend}>\n${clipDef}${bg}${inner ? '\n' + inner : ''}\n${indent}</g>`;
   }
+  if (n.type === 'section') {
+    // translucent backdrop rect (no clip, no children)
+    return `${indent}<rect${transform} width="${escAttrNum(n.w)}" height="${escAttrNum(n.h)}"${n.cornerRadius > 0 ? ` rx="${escAttrNum(n.cornerRadius)}"` : ''} fill="${fill}"${op}${strokePart}${fx}${blend}/>`;
+  }
+  if (n.type === 'slice') {
+    // editor-only — skip in SVG output
+    return '';
+  }
   switch (n.type) {
     case 'rect':
       return `${indent}<rect${transform} width="${escAttrNum(n.w)}" height="${escAttrNum(n.h)}"${n.cornerRadius > 0 ? ` rx="${escAttrNum(n.cornerRadius)}"` : ''} fill="${fill}"${op}${strokePart}${fx}${blend}/>`;
@@ -365,6 +386,25 @@ export function exportSVG(scope: ExportScope = 'selection'): void {
   const filename = exportFilename('svg', scope);
   downloadBlob(svg, filename);
   s.toast(`Exported ${filename}`);
+}
+
+/** Build the SVG markup string for the current selection (inspect mode). */
+export function svgStringOfSelection(): string | null {
+  const s = useIris.getState();
+  const ids = s.selection;
+  if (ids.length === 0) return null;
+  const bounds = contentBounds(s.doc, s.currentPageId, ids);
+  if (!bounds || bounds.w < 0.5 || bounds.h < 0.5) return null;
+  const roots = ids.map((id) => s.doc.nodesById[id]).filter(Boolean) as IrisNode[];
+  clipSeq = 0;
+  gradSeq = 0;
+  filtSeq = 0;
+  defsOut = [];
+  const body = roots.map((n) => nodeToSVG(s.doc, n, '  ')).filter(Boolean).join('\n');
+  const defs = defsOut.length ? `  <defs>\n${defsOut.map((d) => `  ${d}`).join('\n')}\n  </defs>\n` : '';
+  const w = Math.ceil(bounds.w * 100) / 100;
+  const h = Math.ceil(bounds.h * 100) / 100;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${escAttrNum(bounds.x)} ${escAttrNum(bounds.y)} ${w} ${h}">\n${defs}${body}\n</svg>`;
 }
 
 /** Re-export helpers used elsewhere. */

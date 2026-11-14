@@ -20,7 +20,9 @@ export type NodeType =
   | 'image'
   | 'polygon'
   | 'star'
-  | 'arrow';
+  | 'arrow'
+  | 'section'
+  | 'slice';
 
 export type TextAlign = 'left' | 'center' | 'right';
 export type TextCase = 'as-typed' | 'upper' | 'lower' | 'title';
@@ -165,6 +167,8 @@ export interface IrisDoc {
   pagesById: Record<ID, IrisPage>;
   nodesById: Record<ID, IrisNode>;
   settings: DocSettings;
+  /** canvas comment pins */
+  comments: IrisComment[];
 }
 
 export const NODE_TYPE_LABEL: Record<NodeType, string> = {
@@ -179,7 +183,52 @@ export const NODE_TYPE_LABEL: Record<NodeType, string> = {
   polygon: 'Polygon',
   star: 'Star',
   arrow: 'Arrow',
+  section: 'Section',
+  slice: 'Slice',
 };
+
+/** Canvas comment pin (Figma-style). Stored on the document, per page. */
+export interface IrisComment {
+  id: ID;
+  pageId: ID;
+  /** world-space anchor */
+  x: number;
+  y: number;
+  text: string;
+  author: string;
+  ts: number;
+  resolved: boolean;
+}
+
+/** Named frame size presets (shown when the Frame tool is active). */
+export interface FramePreset {
+  id: string;
+  name: string;
+  w: number;
+  h: number;
+  group: string;
+}
+
+export const FRAME_PRESETS: FramePreset[] = [
+  { id: 'phone-small', name: 'Phone small', w: 320, h: 568, group: 'Phone' },
+  { id: 'phone', name: 'Phone', w: 375, h: 812, group: 'Phone' },
+  { id: 'phone-large', name: 'Phone large', w: 414, h: 896, group: 'Phone' },
+  { id: 'tablet', name: 'Tablet', w: 768, h: 1024, group: 'Tablet' },
+  { id: 'tablet-landscape', name: 'Tablet landscape', w: 1024, h: 768, group: 'Tablet' },
+  { id: 'desktop', name: 'Desktop', w: 1440, h: 1024, group: 'Desktop' },
+  { id: 'desktop-small', name: 'Desktop small', w: 1024, h: 768, group: 'Desktop' },
+  { id: 'laptop', name: 'Laptop', w: 1280, h: 800, group: 'Desktop' },
+  { id: 'monitor', name: 'Monitor', w: 1920, h: 1080, group: 'Desktop' },
+  { id: 'a4', name: 'A4 paper', w: 595, h: 842, group: 'Paper' },
+  { id: 'a3', name: 'A3 paper', w: 842, h: 1191, group: 'Paper' },
+  { id: 'letter', name: 'US Letter', w: 612, h: 792, group: 'Paper' },
+  { id: 'slide-169', name: 'Presentation 16:9', w: 1920, h: 1080, group: 'Slide' },
+  { id: 'slide-43', name: 'Presentation 4:3', w: 1024, h: 768, group: 'Slide' },
+  { id: 'social-post', name: 'Social post', w: 1080, h: 1080, group: 'Social' },
+  { id: 'social-story', name: 'Social story', w: 1080, h: 1920, group: 'Social' },
+  { id: 'social-cover', name: 'Social cover', w: 1500, h: 500, group: 'Social' },
+  { id: 'watch', name: 'Watch', w: 324, h: 394, group: 'Wearables' },
+];
 
 export const BLEND_MODES: BlendMode[] = [
   'normal',
@@ -258,6 +307,27 @@ function defaultsFor(type: NodeType): Partial<IrisNode> {
         arrowEnd: 'arrow',
         name: 'Arrow',
       };
+    case 'section':
+      return {
+        w: 800,
+        h: 600,
+        fill: 'rgba(136,136,136,0.10)',
+        stroke: '#6F6F6F',
+        strokeWidth: 1,
+        cornerRadius: 12,
+        clip: false,
+        name: 'Section',
+      };
+    case 'slice':
+      return {
+        w: 200,
+        h: 150,
+        fill: null,
+        stroke: '#F24822',
+        strokeWidth: 1,
+        dash: 'dashed',
+        name: 'Slice',
+      };
   }
 }
 
@@ -330,6 +400,7 @@ export function createDefaultDoc(): IrisDoc {
     pagesById: { [page.id]: page },
     nodesById: {},
     settings: { ...DEFAULT_SETTINGS, grid: { ...DEFAULT_SETTINGS.grid }, guidesX: [], guidesY: [] },
+    comments: [],
   };
 }
 
@@ -452,7 +523,30 @@ const VALID_TYPES: NodeType[] = [
   'polygon',
   'star',
   'arrow',
+  'section',
+  'slice',
 ];
+
+function normalizeComments(raw: unknown, pages: ID[]): IrisComment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: IrisComment[] = [];
+  for (const c of raw) {
+    if (!c || typeof c !== 'object') continue;
+    const r = c as Partial<IrisComment>;
+    if (typeof r.id !== 'string' || typeof r.x !== 'number' || typeof r.y !== 'number') continue;
+    out.push({
+      id: r.id,
+      pageId: typeof r.pageId === 'string' && pages.includes(r.pageId) ? r.pageId : pages[0],
+      x: r.x,
+      y: r.y,
+      text: typeof r.text === 'string' ? r.text : '',
+      author: typeof r.author === 'string' ? r.author : 'You',
+      ts: typeof r.ts === 'number' ? r.ts : Date.now(),
+      resolved: !!r.resolved,
+    });
+  }
+  return out;
+}
 
 function normalizeSettings(raw: unknown): DocSettings {
   const s: DocSettings = { ...DEFAULT_SETTINGS, grid: { ...DEFAULT_SETTINGS.grid }, guidesX: [], guidesY: [] };
@@ -482,7 +576,9 @@ export function normalizeDoc(raw: unknown): IrisDoc {
     pagesById: {},
     nodesById: {},
     settings: normalizeSettings(src.settings),
+    comments: [],
   };
+  doc.comments = normalizeComments(src.comments, doc.pages);
   for (const p of Object.values(src.pagesById ?? {})) {
     if (p && typeof p === 'object' && typeof p.id === 'string') {
       doc.pagesById[p.id] = {

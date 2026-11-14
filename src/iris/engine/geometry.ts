@@ -480,13 +480,15 @@ export function hitTestNode(doc: IrisDoc, n: IrisNode, worldPt: Vec, tolerance: 
   switch (n.type) {
     case 'rect':
     case 'frame':
+    case 'section':
+    case 'slice':
     case 'text':
     case 'image':
     case 'polygon':
     case 'star': {
       if (p.x < -tolerance || p.y < -tolerance || p.x > n.w + tolerance || p.y > n.h + tolerance) return false;
       // rounded corner check for rects with radius
-      if ((n.type === 'rect' || n.type === 'frame') && n.cornerRadius > 0) {
+      if ((n.type === 'rect' || n.type === 'frame' || n.type === 'section') && n.cornerRadius > 0) {
         const r = Math.min(n.cornerRadius, n.w / 2, n.h / 2);
         const inXBand = p.x >= r && p.x <= n.w - r;
         const inYBand = p.y >= r && p.y <= n.h - r;
@@ -645,7 +647,7 @@ export function frameAtPoint(
   let best: IrisNode | null = null;
   const visitDeep = (id: ID) => {
     const n = doc.nodesById[id];
-    if (!n || !n.visible || excluded.has(id)) return;
+    if (!n || !n.visible || n.locked || excluded.has(id)) return;
     // children (topmost sibling first) take priority over the frame itself
     for (let i = n.children.length - 1; i >= 0; i--) visitDeep(n.children[i]);
     if (n.type === 'frame' && !best) {

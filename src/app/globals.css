@@ -133,7 +133,7 @@
   --card-foreground: #ffffff;
   --popover: #2c2c2c;
   --popover-foreground: #ffffff;
-  --primary: #8b5cf6;
+  --primary: #0d99ff;
   --primary-foreground: #ffffff;
   --secondary: #383838;
   --secondary-foreground: #ffffff;
@@ -144,7 +144,7 @@
   --destructive: #f24822;
   --border: #3e3e3e;
   --input: #3e3e3e;
-  --ring: #8b5cf6;
+  --ring: #0d99ff;
   --radius: 0.375rem;
 
   --iris-bg: #1e1e1e;
@@ -159,10 +159,10 @@
   --iris-text-2: #c9c9c9;
   --iris-text-3: #9a9a9a;
   --iris-text-4: #6f6f6f;
-  --iris-accent: #8b5cf6;
-  --iris-accent-hover: #7c3aed;
-  --iris-accent-soft: rgba(139, 92, 246, 0.16);
-  --iris-accent-line: #8b5cf6;
+  --iris-accent: #0d99ff;
+  --iris-accent-hover: #0b87e0;
+  --iris-accent-soft: rgba(13, 153, 255, 0.16);
+  --iris-accent-line: #0d99ff;
   --iris-danger: #f24822;
   --iris-snap: #ff3b30;
   --iris-input: rgba(255, 255, 255, 0.07);
@@ -217,6 +217,50 @@
 }
 .iris-input::placeholder {
   color: var(--iris-text-4);
+}
+
+/* Square pill button in the floating toolbar (no chevron) */
+.iris-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  width: 34px;
+  border-radius: 8px;
+  color: var(--iris-text-2);
+  cursor: default;
+  flex: none;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+.iris-pill-btn:hover {
+  background: var(--iris-hover);
+  color: var(--iris-text-1);
+}
+.iris-pill-btn[data-active="true"] {
+  background: #0d99ff;
+  color: #ffffff;
+}
+
+/* dropdown / popover entrance animation */
+@keyframes iris-menu-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+@keyframes iris-menu-in-down {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Panel section header */

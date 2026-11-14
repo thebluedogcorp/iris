@@ -1,0 +1,1082 @@
+     1→/**
+     2→ * Iris canvas renderer: scene draw pass + selection overlay + snap guides +
+     3→ * rulers + pixel grid + layout grid + ruler guides.
+     4→ *
+     5→ * Scene pass note: drawNode() applies each node's LOCAL matrix on top of the
+     6→ * parent's already-applied world matrix — this is what makes content inside
+     7→ * frames/groups render in the right place (applying full world matrices
+     8→ * recursively would double-transform nested content).
+     9→ */
+    10→
+    11→import { ID, IrisDoc, IrisNode } from './model';
+    12→import {
+    13→  IDENTITY,
+    14→  Mat,
+    15→  RULER,
+    16→  Rect,
+    17→  Vec,
+    18→  arrowPath2d,
+    19→  applyTextCase,
+    20→  boundsOfNodes,
+    21→  dashArray,
+    22→  firstBaseline,
+    23→  fontString,
+    24→  gradientLine,
+    25→  mApply,
+    26→  mMul,
+    27→  measureText,
+    28→  nodeLocalMatrix,
+    29→  nodeWorldAABB,
+    30→  nodeWorldMatrix,
+    31→  path2dForPoints,
+    32→  regularPath2d,
+    33→  screenToWorld,
+    34→  selectionHandleGeometry,
+    35→  visibleWorldRect,
+    36→  worldToScreen,
+    37→} from './geometry';
+    38→import { overlay } from './overlay';
+    39→import { useIris } from './store';
+    40→import { getImage, onImageCacheChange } from './imageCache';
+    41→
+    42→export const ACCENT = '#8B5CF6';
+    43→export const ACCENT_LIGHT = '#C4B5FD';
+    44→const SNAP = '#FF3B30';
+    45→const DEFAULT_CANVAS_BG = '#242424';
+    46→const RULER_BG = '#1E1E1E';
+    47→const RULER_BORDER = '#3E3E3E';
+    48→const RULER_TEXT = '#7A7A7A';
+    49→const GUIDE_COLOR = '#F26BFF';
+    50→
+    51→let canvas: HTMLCanvasElement | null = null;
+    52→let ctx: CanvasRenderingContext2D | null = null;
+    53→let raf = 0;
+    54→/** set during the scene pass: render shapes as outlines (wireframe view) */
+    55→let outlineMode = false;
+    56→
+    57→export function requestDraw(): void {
+    58→  if (raf) return;
+    59→  raf = requestAnimationFrame(() => {
+    60→    raf = 0;
+    61→    draw();
+    62→  });
+    63→}
+    64→
+    65→function resize(): void {
+    66→  if (!canvas) return;
+    67→  const dpr = window.devicePixelRatio || 1;
+    68→  const w = canvas.clientWidth;
+    69→  const h = canvas.clientHeight;
+    70→  if (w === 0 || h === 0) return;
+    71→  const pw = Math.round(w * dpr);
+    72→  const ph = Math.round(h * dpr);
+    73→  if (canvas.width !== pw || canvas.height !== ph) {
+    74→    canvas.width = pw;
+    75→    canvas.height = ph;
+    76→  }
+    77→  const st = useIris.getState();
+    78→  if (Math.abs(st.canvasSize.w - w) > 0.5 || Math.abs(st.canvasSize.h - h) > 0.5) {
+    79→    st.setCanvasSize(w, h);
+    80→  }
+    81→}
+    82→
+    83→export function initRenderer(c: HTMLCanvasElement): () => void {
+    84→  canvas = c;
+    85→  ctx = c.getContext('2d');
+    86→  const ro = new ResizeObserver(() => {
+    87→    resize();
+    88→    requestDraw();
+    89→  });
+    90→  ro.observe(c);
+    91→  const unsubStore = useIris.subscribe(() => requestDraw());
+    92→  const unsubImages = onImageCacheChange(() => requestDraw());
+    93→  resize();
+    94→  requestDraw();
+    95→  return () => {
+    96→    ro.disconnect();
+    97→    unsubStore();
+    98→    unsubImages();
+    99→    if (raf) cancelAnimationFrame(raf);
+   100→    raf = 0;
+   101→    canvas = null;
+   102→    ctx = null;
+   103→  };
+   104→}
+   105→
+   106→/** Sample the rendered pixel color under a client-space point (eyedropper). */
+   107→export function samplePixel(clientX: number, clientY: number): string | null {
+   108→  if (!canvas || !ctx) return null;
+   109→  const r = canvas.getBoundingClientRect();
+   110→  const dpr = window.devicePixelRatio || 1;
+   111→  const x = Math.round((clientX - r.left) * dpr);
+   112→  const y = Math.round((clientY - r.top) * dpr);
+   113→  if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return null;
+   114→  try {
+   115→    const d = ctx.getImageData(x, y, 1, 1).data;
+   116→    const hex = (v: number) => v.toString(16).padStart(2, '0');
+   117→    return `#${hex(d[0])}${hex(d[1])}${hex(d[2])}`.toUpperCase();
+   118→  } catch {
+   119→    return null;
+   120→  }
+   121→}
+   122→
+   123→/* ------------------------------------------------------------------ */
+   124→/* Scene pass (shared with PNG export)                                 */
+   125→/* ------------------------------------------------------------------ */
+   126→
+   127→function roundRectPath(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+   128→  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+   129→  c.beginPath();
+   130→  if (rr <= 0) {
+   131→    c.rect(x, y, w, h);
+   132→    return;
+   133→  }
+   134→  c.moveTo(x + rr, y);
+   135→  c.arcTo(x + w, y, x + w, y + h, rr);
+   136→  c.arcTo(x + w, y + h, x, y + h, rr);
+   137→  c.arcTo(x, y + h, x, y, rr);
+   138→  c.arcTo(x, y, x + w, y, rr);
+   139→  c.closePath();
+   140→}
+   141→
+   142→/** Current uniform-ish scale of the ctx transform (for hairline widths). */
+   143→function ctxScale(c: CanvasRenderingContext2D): number {
+   144→  try {
+   145→    const t = c.getTransform();
+   146→    const det = t.a * t.d - t.b * t.c;
+   147→    return Math.sqrt(Math.abs(det)) || 1;
+   148→  } catch {
+   149→    return 1;
+   150→  }
+   151→}
+   152→
+   153→/** Resolve a node's paint: solid color or gradient object. */
+   154→function paintOf(c: CanvasRenderingContext2D, n: IrisNode): string | CanvasGradient | null {
+   155→  if (n.fillGradient) {
+   156→    const g = n.fillGradient;
+   157→    let grad: CanvasGradient;
+   158→    if (g.type === 'radial') {
+   159→      const r = Math.max(n.w, n.h) / 2;
+   160→      grad = c.createRadialGradient(n.w / 2, n.h / 2, 0, n.w / 2, n.h / 2, Math.max(r, 0.01));
+   161→    } else {
+   162→      const l = gradientLine(n.w, n.h, g.angle);
+   163→      grad = c.createLinearGradient(l.x1, l.y1, l.x2, l.y2);
+   164→    }
+   165→    grad.addColorStop(0, g.from);
+   166→    grad.addColorStop(1, g.to);
+   167→    return grad;
+   168→  }
+   169→  return n.fill;
+   170→}
+   171→
+   172→interface PaintOpts {
+   173→  /** skip fills (outline view) */
+   174→  noFill?: boolean;
+   175→}
+   176→
+   177→/** Shared fill+stroke painting for closed shapes given a prepared path. */
+   178→function paintPath(
+   179→  c: CanvasRenderingContext2D,
+   180→  n: IrisNode,
+   181→  path: Path2D,
+   182→  opts: PaintOpts = {},
+   183→): void {
+   184→  const fill = outlineMode && !opts.noFill ? null : paintOf(c, n);
+   185→  if (fill) {
+   186→    c.fillStyle = fill;
+   187→    c.fill(path);
+   188→  }
+   189→  if (n.stroke && n.strokeWidth > 0) {
+   190→    c.strokeStyle = n.stroke;
+   191→    c.lineWidth = n.strokeWidth;
+   192→    const dash = dashArray(n.dash, n.strokeWidth);
+   193→    if (dash.length) c.setLineDash(dash);
+   194→    c.stroke(path);
+   195→    if (dash.length) c.setLineDash([]);
+   196→  } else if (outlineMode && !fill) {
+   197→    /* outline mode with no paint at all: show a hairline */
+   198→    c.strokeStyle = 'rgba(255,255,255,0.45)';
+   199→    c.lineWidth = 1 / ctxScale(c);
+   200→    c.stroke(path);
+   201→  }
+   202→}
+   203→
+   204→/** Draw a set of nodes (ctx is expected to be in the PARENT-of-roots space). */
+   205→export function drawNodes(
+   206→  c: CanvasRenderingContext2D,
+   207→  doc: IrisDoc,
+   208→  pageId: IrisDoc['pages'][number],
+   209→  alpha: number,
+   210→  ids?: ID[],
+   211→): void {
+   212→  const page = doc.pagesById[pageId];
+   213→  if (!page) return;
+   214→  const targets: IrisNode[] = ids
+   215→    ? ids.map((id) => doc.nodesById[id]).filter((n): n is IrisNode => !!n && n.visible)
+   216→    : page.nodeIds.map((id) => doc.nodesById[id]).filter((n): n is IrisNode => !!n && n.visible);
+   217→  for (const n of targets) drawNode(c, doc, n, alpha, IDENTITY);
+   218→}
+   219→
+   220→function drawNode(
+   221→  c: CanvasRenderingContext2D,
+   222→  doc: IrisDoc,
+   223→  n: IrisNode,
+   224→  alpha: number,
+   225→  parentWorld: Mat,
+   226→): void {
+   227→  if (!n.visible) return;
+   228→  const ga = alpha * n.opacity;
+   229→  const local = nodeLocalMatrix(n);
+   230→  const world = mMul(parentWorld, local);
+   231→  c.save();
+   232→  c.transform(local.a, local.b, local.c, local.d, local.e, local.f);
+   233→  c.globalAlpha = ga;
+   234→  if (n.blend && n.blend !== 'normal') c.globalCompositeOperation = n.blend;
+   235→  if (n.blur > 0) {
+   236→    try {
+   237→      c.filter = `blur(${n.blur}px)`;
+   238→    } catch {
+   239→      /* canvas filters unsupported */
+   240→    }
+   241→  }
+   242→
+   243→  const applyShadow = (): void => {
+   244→    if (n.shadow) {
+   245→      c.shadowColor = n.shadow.color;
+   246→      c.shadowOffsetX = n.shadow.x;
+   247→      c.shadowOffsetY = n.shadow.y;
+   248→      c.shadowBlur = n.shadow.blur;
+   249→    }
+   250→  };
+   251→  const clearShadow = (): void => {
+   252→    c.shadowColor = 'transparent';
+   253→    c.shadowBlur = 0;
+   254→    c.shadowOffsetX = 0;
+   255→    c.shadowOffsetY = 0;
+   256→  };
+   257→
+   258→  if (n.type === 'group') {
+   259→    for (const childId of n.children) {
+   260→      const child = doc.nodesById[childId];
+   261→      if (child) drawNode(c, doc, child, ga, world);
+   262→    }
+   263→    c.restore();
+   264→    return;
+   265→  }
+   266→
+   267→  if (n.type === 'frame') {
+   268→    const framePaint = paintOf(c, n);
+   269→    if (framePaint && !outlineMode) {
+   270→      roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
+   271→      applyShadow();
+   272→      c.fillStyle = framePaint;
+   273→      c.fill();
+   274→      clearShadow();
+   275→    }
+   276→    if (n.clip) {
+   277→      roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
+   278→      c.clip();
+   279→    }
+   280→    for (const childId of n.children) {
+   281→      const child = doc.nodesById[childId];
+   282→      if (child) drawNode(c, doc, child, ga, world);
+   283→    }
+   284→    if (n.stroke && n.strokeWidth > 0) {
+   285→      roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
+   286→      c.strokeStyle = n.stroke;
+   287→      c.lineWidth = n.strokeWidth;
+   288→      const dash = dashArray(n.dash, n.strokeWidth);
+   289→      if (dash.length) c.setLineDash(dash);
+   290→      c.stroke();
+   291→      if (dash.length) c.setLineDash([]);
+   292→    }
+   293→    c.restore();
+   294→    return;
+   295→  }
+   296→
+   297→  switch (n.type) {
+   298→    case 'rect': {
+   299→      const p = new Path2D();
+   300→      const rr = Math.max(0, Math.min(n.cornerRadius, n.w / 2, n.h / 2));
+   301→      if (rr <= 0) p.rect(0, 0, n.w, n.h);
+   302→      else {
+   303→        p.moveTo(rr, 0);
+   304→        p.arcTo(n.w, 0, n.w, n.h, rr);
+   305→        p.arcTo(n.w, n.h, 0, n.h, rr);
+   306→        p.arcTo(0, n.h, 0, 0, rr);
+   307→        p.arcTo(0, 0, n.w, 0, rr);
+   308→        p.closePath();
+   309→      }
+   310→      applyShadow();
+   311→      paintPath(c, n, p);
+   312→      clearShadow();
+   313→      break;
+   314→    }
+   315→    case 'ellipse': {
+   316→      const p = new Path2D();
+   317→      p.ellipse(n.w / 2, n.h / 2, Math.abs(n.w / 2), Math.abs(n.h / 2), 0, 0, Math.PI * 2);
+   318→      applyShadow();
+   319→      paintPath(c, n, p);
+   320→      clearShadow();
+   321→      break;
+   322→    }
+   323→    case 'polygon':
+   324→    case 'star': {
+   325→      const p = regularPath2d(n);
+   326→      applyShadow();
+   327→      paintPath(c, n, p);
+   328→      clearShadow();
+   329→      break;
+   330→    }
+   331→    case 'line': {
+   332→      const p = new Path2D();
+   333→      if (n.flip) {
+   334→        p.moveTo(n.w, 0);
+   335→        p.lineTo(0, n.h);
+   336→      } else {
+   337→        p.moveTo(0, 0);
+   338→        p.lineTo(n.w, n.h);
+   339→      }
+   340→      c.strokeStyle = n.stroke ?? '#000000';
+   341→      c.lineWidth = Math.max(n.strokeWidth, 0.5);
+   342→      const dash = dashArray(n.dash, n.strokeWidth);
+   343→      if (dash.length) c.setLineDash(dash);
+   344→      c.stroke(p);
+   345→      if (dash.length) c.setLineDash([]);
+   346→      break;
+   347→    }
+   348→    case 'arrow': {
+   349→      const { shaft, heads } = arrowPath2d(n);
+   350→      c.strokeStyle = n.stroke ?? '#000000';
+   351→      c.lineWidth = Math.max(n.strokeWidth, 0.5);
+   352→      const dash = dashArray(n.dash, n.strokeWidth);
+   353→      if (dash.length) c.setLineDash(dash);
+   354→      c.stroke(shaft);
+   355→      if (dash.length) c.setLineDash([]);
+   356→      for (const head of heads) {
+   357→        c.fillStyle = n.stroke ?? '#000000';
+   358→        c.fill(head);
+   359→        c.stroke(head);
+   360→      }
+   361→      break;
+   362→    }
+   363→    case 'path': {
+   364→      const p = path2dForPoints(n.points, n.closed);
+   365→      applyShadow();
+   366→      paintPath(c, n, p);
+   367→      clearShadow();
+   368→      break;
+   369→    }
+   370→    case 'text': {
+   371→      const tm = textMetrics(n);
+   372→      c.font = fontString(n);
+   373→      try {
+   374→        (c as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${n.letterSpacing ?? 0}px`;
+   375→      } catch {
+   376→        /* not supported */
+   377→      }
+   378→      c.fillStyle = n.fill ?? '#000000';
+   379→      c.textBaseline = 'alphabetic';
+   380→      c.textAlign = n.textAlign === 'center' ? 'center' : n.textAlign === 'right' ? 'right' : 'left';
+   381→      const x = n.textAlign === 'center' ? n.w / 2 : n.textAlign === 'right' ? n.w : 0;
+   382→      const base = firstBaseline(n, tm.ascent, tm.descent);
+   383→      const lineH = n.fontSize * n.lineHeight;
+   384→      tm.lines.forEach((line, i) => {
+   385→        c.fillText(line, x, base + i * lineH);
+   386→        const width = c.measureText(line).width;
+   387→        const x0 = n.textAlign === 'center' ? x - width / 2 : n.textAlign === 'right' ? x - width : x;
+   388→        const y = base + i * lineH;
+   389→        if (n.underline) {
+   390→          c.fillRect(x0, y + n.fontSize * 0.08, width, Math.max(1, n.fontSize * 0.06));
+   391→        }
+   392→        if (n.strike) {
+   393→          c.fillRect(x0, y - n.fontSize * 0.32, width, Math.max(1, n.fontSize * 0.06));
+   394→        }
+   395→      });
+   396→      try {
+   397→        (c as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = '0px';
+   398→      } catch {
+   399→        /* ignore */
+   400→      }
+   401→      break;
+   402→    }
+   403→    case 'image': {
+   404→      const img = n.src ? getImage(n.src) : null;
+   405→      if (img && !outlineMode) {
+   406→        if (n.cornerRadius > 0) {
+   407→          roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
+   408→          c.save();
+   409→          c.clip();
+   410→          c.drawImage(img, 0, 0, n.w, n.h);
+   411→          c.restore();
+   412→        } else {
+   413→          c.drawImage(img, 0, 0, n.w, n.h);
+   414→        }
+   415→      } else {
+   416→        c.strokeStyle = 'rgba(255,255,255,0.28)';
+   417→        c.lineWidth = 1 / ctxScale(c);
+   418→        c.setLineDash([6 * c.lineWidth, 4 * c.lineWidth]);
+   419→        c.strokeRect(0, 0, n.w, n.h);
+   420→        c.setLineDash([]);
+   421→        c.globalAlpha = ga * 0.5;
+   422→        c.beginPath();
+   423→        c.moveTo(0, 0);
+   424→        c.lineTo(n.w, n.h);
+   425→        c.moveTo(n.w, 0);
+   426→        c.lineTo(0, n.h);
+   427→        c.stroke();
+   428→      }
+   429→      break;
+   430→    }
+   431→  }
+   432→  c.restore();
+   433→}
+   434→
+   435→/** Draw a text node's lines with a custom transform (used by guides badge etc.). */
+   436→export function applyTextTransform(text: string, textCase: IrisNode['textCase']): string {
+   437→  return applyTextCase(text, textCase);
+   438→}
+   439→
+   440→/* text metrics cache keyed by node identity */
+   441→const textCache = new WeakMap<
+   442→  IrisNode,
+   443→  { text: string; w: number; auto: boolean; family: string; size: number; spacing: number; tcase: string; metrics: ReturnType<typeof measureText> }
+   444→>();
+   445→
+   446→function textMetrics(n: IrisNode): ReturnType<typeof measureText> {
+   447→  const cached = textCache.get(n);
+   448→  if (
+   449→    cached &&
+   450→    cached.text === n.text &&
+   451→    cached.w === n.w &&
+   452→    cached.auto === n.autoWidth &&
+   453→    cached.family === n.fontFamily &&
+   454→    cached.size === n.fontSize &&
+   455→    cached.spacing === n.letterSpacing &&
+   456→    cached.tcase === n.textCase
+   457→  ) {
+   458→    return cached.metrics;
+   459→  }
+   460→  const metrics = measureText(n);
+   461→  textCache.set(n, {
+   462→    text: n.text,
+   463→    w: n.w,
+   464→    auto: n.autoWidth,
+   465→    family: n.fontFamily,
+   466→    size: n.fontSize,
+   467→    spacing: n.letterSpacing,
+   468→    tcase: n.textCase,
+   469→    metrics,
+   470→  });
+   471→  return metrics;
+   472→}
+   473→
+   474→/* ------------------------------------------------------------------ */
+   475→/* Main draw                                                           */
+   476→/* ------------------------------------------------------------------ */
+   477→
+   478→function draw(): void {
+   479→  const s = useIris.getState();
+   480→  if (!canvas || !ctx) return;
+   481→  const c = ctx;
+   482→  const dpr = window.devicePixelRatio || 1;
+   483→  const W = canvas.clientWidth;
+   484→  const H = canvas.clientHeight;
+   485→  const vp = s.viewport;
+   486→  const ox = s.viewFlags.rulers ? RULER : 0;
+   487→  const oy = s.viewFlags.rulers ? RULER : 0;
+   488→
+   489→  outlineMode = !!s.viewFlags.outline;
+   490→
+   491→  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+   492→  c.clearRect(0, 0, W, H);
+   493→  const bg = /^#[0-9a-fA-F]{3,8}$/.test(s.doc.settings?.bg ?? '') ? s.doc.settings.bg : DEFAULT_CANVAS_BG;
+   494→  c.fillStyle = bg;
+   495→  c.fillRect(0, 0, W, H);
+   496→
+   497→  // world layer
+   498→  c.save();
+   499→  c.translate(ox + vp.x, oy + vp.y);
+   500→  c.scale(vp.zoom, vp.zoom);
+   501→  drawNodes(c, s.doc, s.currentPageId, 1);
+   502→  c.restore();
+   503→
+   504→  // pixel grid
+   505→  if (s.viewFlags.pixelGrid && vp.zoom >= 8) {
+   506→    const view = visibleWorldRect(vp, W, H, ox, oy);
+   507→    c.strokeStyle = vp.zoom >= 32 ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.05)';
+   508→    c.lineWidth = 1;
+   509→    c.beginPath();
+   510→    for (let x = Math.ceil(view.x); x <= view.x + view.w; x++) {
+   511→      const sx = Math.round(x * vp.zoom + vp.x + ox) + 0.5;
+   512→      c.moveTo(sx, oy);
+   513→      c.lineTo(sx, H);
+   514→    }
+   515→    for (let y = Math.ceil(view.y); y <= view.y + view.h; y++) {
+   516→      const sy = Math.round(y * vp.zoom + vp.y + oy) + 0.5;
+   517→      c.moveTo(ox, sy);
+   518→      c.lineTo(W, sy);
+   519→    }
+   520→    c.stroke();
+   521→  }
+   522→
+   523→  // layout grid
+   524→  const grid = s.doc.settings?.grid;
+   525→  if (grid?.show && grid.size >= 1 && vp.zoom * grid.size >= 4) {
+   526→    const view = visibleWorldRect(vp, W, H, ox, oy);
+   527→    c.strokeStyle = 'rgba(255,255,255,0.07)';
+   528→    c.lineWidth = 1;
+   529→    c.beginPath();
+   530→    for (let x = Math.ceil(view.x / grid.size) * grid.size; x <= view.x + view.w; x += grid.size) {
+   531→      const sx = Math.round(x * vp.zoom + vp.x + ox) + 0.5;
+   532→      c.moveTo(sx, oy);
+   533→      c.lineTo(sx, H);
+   534→    }
+   535→    for (let y = Math.ceil(view.y / grid.size) * grid.size; y <= view.y + view.h; y += grid.size) {
+   536→      const sy = Math.round(y * vp.zoom + vp.y + oy) + 0.5;
+   537→      c.moveTo(ox, sy);
+   538→      c.lineTo(W, sy);
+   539→    }
+   540→    c.stroke();
+   541→  }
+   542→
+   543→  // overlay layer (content-space coords: includes vp pan, not ruler origin)
+   544→  c.save();
+   545→  c.translate(ox, oy);
+   546→  drawOverlay(c, s, W - ox, H - oy);
+   547→  c.restore();
+   548→
+   549→  if (s.viewFlags.rulers) drawRulers(c, s, W, H, ox, oy);
+   550→
+   551→  // frame labels (screen space, above everything except rulers)
+   552→  drawFrameLabels(c, s, ox, oy, W, H);
+   553→}
+   554→
+   555→function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.getState>, W: number, H: number): void {
+   556→  const vp = s.viewport;
+   557→  const doc = s.doc;
+   558→  const toScreen = (p: Vec): Vec => worldToScreen(vp, p.x, p.y);
+   559→
+   560→  const page = doc.pagesById[s.currentPageId];
+   561→
+   562→  // empty page hint
+   563→  if (page && page.nodeIds.length === 0 && !overlay.penDraft) {
+   564→    c.fillStyle = '#5F5F5F';
+   565→    c.textAlign = 'center';
+   566→    c.textBaseline = 'middle';
+   567→    c.font = '600 13px Inter, system-ui, sans-serif';
+   568→    c.fillText('Nothing here yet', W / 2, H / 2 - 16);
+   569→    c.font = '12px Inter, system-ui, sans-serif';
+   570→    c.fillStyle = '#4E4E4E';
+   571→    c.fillText(
+   572→      'Press F for a frame · R rectangle · O ellipse · Y polygon · S star · T text · P pen',
+   573→      W / 2,
+   574→      H / 2 + 8,
+   575→    );
+   576→    c.textAlign = 'left';
+   577→    c.textBaseline = 'alphabetic';
+   578→  }
+   579→
+   580→  // ruler guides
+   581→  const guides = doc.settings ?? { guidesX: [], guidesY: [] };
+   582→  if (guides.guidesX?.length || guides.guidesY?.length) {
+   583→    c.strokeStyle = GUIDE_COLOR;
+   584→    c.lineWidth = 1;
+   585→    c.setLineDash([]);
+   586→    for (const gx of guides.guidesX ?? []) {
+   587→      const x = Math.round(gx * vp.zoom + vp.x) + 0.5;
+   588→      c.beginPath();
+   589→      c.moveTo(x, 0);
+   590→      c.lineTo(x, H);
+   591→      c.stroke();
+   592→    }
+   593→    for (const gy of guides.guidesY ?? []) {
+   594→      const y = Math.round(gy * vp.zoom + vp.y) + 0.5;
+   595→      c.beginPath();
+   596→      c.moveTo(0, y);
+   597→      c.lineTo(W, y);
+   598→      c.stroke();
+   599→    }
+   600→  }
+   601→  // guide drag preview
+   602→  if (overlay.guideDrag) {
+   603→    c.strokeStyle = GUIDE_COLOR;
+   604→    c.lineWidth = 1;
+   605→    c.beginPath();
+   606→    if (overlay.guideDrag.axis === 'x') {
+   607→      const x = Math.round(overlay.guideDrag.at * vp.zoom + vp.x) + 0.5;
+   608→      c.moveTo(x, 0);
+   609→      c.lineTo(x, H);
+   610→    } else {
+   611→      const y = Math.round(overlay.guideDrag.at * vp.zoom + vp.y) + 0.5;
+   612→      c.moveTo(0, y);
+   613→      c.lineTo(W, y);
+   614→    }
+   615→    c.stroke();
+   616→  }
+   617→
+   618→  // hover outline
+   619→  const hover = s.hoverId ? doc.nodesById[s.hoverId] : undefined;
+   620→  if (
+   621→    hover &&
+   622→    s.tool === 'move' &&
+   623→    !s.selection.includes(hover.id) &&
+   624→    !overlay.marquee &&
+   625→    !s.editingTextId &&
+   626→    !s.editingPathId
+   627→  ) {
+   628→    drawNodeOutline(c, doc, hover, vp, 'rgba(255,255,255,0.5)', 1);
+   629→  }
+   630→
+   631→  // selection outlines
+   632→  for (const id of s.selection) {
+   633→    const n = doc.nodesById[id];
+   634→    if (n) drawNodeOutline(c, doc, n, vp, ACCENT, 1.5);
+   635→  }
+   636→
+   637→  // selection handles
+   638→  if (s.selection.length > 0 && s.tool === 'move' && !s.editingTextId && !s.editingPathId) {
+   639→    const geo = selectionHandleGeometry(doc, s.selection, vp);
+   640→    if (geo) {
+   641→      // box
+   642→      c.strokeStyle = ACCENT;
+   643→      c.lineWidth = 1;
+   644→      if (geo.poly) {
+   645→        c.beginPath();
+   646→        geo.poly.forEach((p, i) => (i === 0 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y)));
+   647→        c.closePath();
+   648→        c.stroke();
+   649→      } else {
+   650→        c.strokeRect(geo.rect.x, geo.rect.y, geo.rect.w, geo.rect.h);
+   651→      }
+   652→      // rotation handle
+   653→      const topMid = geo.pts.find((p) => p.kind === 'n')!;
+   654→      c.beginPath();
+   655→      c.moveTo(topMid.x, topMid.y);
+   656→      c.lineTo(geo.rot.x, geo.rot.y);
+   657→      c.stroke();
+   658→      c.beginPath();
+   659→      c.arc(geo.rot.x, geo.rot.y, 4, 0, Math.PI * 2);
+   660→      c.fillStyle = '#FFFFFF';
+   661→      c.fill();
+   662→      c.strokeStyle = ACCENT;
+   663→      c.stroke();
+   664→      // handles
+   665→      for (const p of geo.pts) {
+   666→        c.fillStyle = '#FFFFFF';
+   667→        c.strokeStyle = ACCENT;
+   668→        c.lineWidth = 1;
+   669→        c.beginPath();
+   670→        c.rect(p.x - 3.75, p.y - 3.75, 7.5, 7.5);
+   671→        c.fill();
+   672→        c.stroke();
+   673→      }
+   674→    }
+   675→  }
+   676→
+   677→  // path edit mode
+   678→  if (s.editingPathId) {
+   679→    const n = doc.nodesById[s.editingPathId];
+   680→    if (n && n.type === 'path') {
+   681→      const m = nodeWorldMatrix(doc, n);
+   682→      const active = overlay.pathEdit?.activePoint ?? null;
+   683→      n.points.forEach((p, i) => {
+   684→        const pos = toScreen(mApply(m, p.x, p.y));
+   685→        const isActive = i === active;
+   686→        c.fillStyle = isActive ? ACCENT : '#FFFFFF';
+   687→        c.strokeStyle = ACCENT;
+   688→        c.lineWidth = 1;
+   689→        c.beginPath();
+   690→        c.rect(pos.x - 3.5, pos.y - 3.5, 7, 7);
+   691→        c.fill();
+   692→        c.stroke();
+   693→        if (isActive && (p.hx !== 0 || p.hy !== 0)) {
+   694→          const out = toScreen(mApply(m, p.x + p.hx, p.y + p.hy));
+   695→          const inn = toScreen(mApply(m, p.x - p.hx, p.y - p.hy));
+   696→          c.strokeStyle = 'rgba(255,255,255,0.7)';
+   697→          c.beginPath();
+   698→          c.moveTo(inn.x, inn.y);
+   699→          c.lineTo(pos.x, pos.y);
+   700→          c.lineTo(out.x, out.y);
+   701→          c.stroke();
+   702→          for (const h of [inn, out]) {
+   703→            c.beginPath();
+   704→            c.arc(h.x, h.y, 3, 0, Math.PI * 2);
+   705→            c.fillStyle = ACCENT;
+   706→            c.fill();
+   707→          }
+   708→        }
+   709→      });
+   710→    }
+   711→  }
+   712→
+   713→  // snap guides
+   714→  if (overlay.guides.length > 0) {
+   715→    c.strokeStyle = SNAP;
+   716→    c.lineWidth = 1;
+   717→    for (const g of overlay.guides) {
+   718→      c.beginPath();
+   719→      if (g.axis === 'x') {
+   720→        const x = Math.round(g.at * vp.zoom + vp.x) + 0.5;
+   721→        const y1 = g.from * vp.zoom + vp.y;
+   722→        const y2 = g.to * vp.zoom + vp.y;
+   723→        c.moveTo(x, y1);
+   724→        c.lineTo(x, y2);
+   725→        c.moveTo(x - 3, y1);
+   726→        c.lineTo(x + 3, y1);
+   727→        c.moveTo(x - 3, y2);
+   728→        c.lineTo(x + 3, y2);
+   729→      } else {
+   730→        const y = Math.round(g.at * vp.zoom + vp.y) + 0.5;
+   731→        const x1 = g.from * vp.zoom + vp.x;
+   732→        const x2 = g.to * vp.zoom + vp.x;
+   733→        c.moveTo(x1, y);
+   734→        c.lineTo(x2, y);
+   735→        c.moveTo(x1, y - 3);
+   736→        c.lineTo(x1, y + 3);
+   737→        c.moveTo(x2, y - 3);
+   738→        c.lineTo(x2, y + 3);
+   739→      }
+   740→      c.stroke();
+   741→    }
+   742→  }
+   743→
+   744→  // size badge during resize / draw
+   745→  if (overlay.dragBadge) {
+   746→    const b = overlay.dragBadge;
+   747→    const p = toScreen({ x: b.x, y: b.y });
+   748→    const label = `${Math.round(b.w)} × ${Math.round(b.h)}`;
+   749→    c.font = '600 11px Inter, system-ui, sans-serif';
+   750→    const tw = c.measureText(label).width;
+   751→    let bx = p.x;
+   752→    let by = p.y - 26;
+   753→    if (by < 4) by = p.y + 8;
+   754→    if (bx < 4) bx = 4;
+   755→    if (bx + tw + 12 > W) bx = W - tw - 16;
+   756→    c.fillStyle = ACCENT;
+   757→    roundRectPath(c, bx, by, tw + 12, 18, 4);
+   758→    c.fill();
+   759→    c.fillStyle = '#FFFFFF';
+   760→    c.textBaseline = 'middle';
+   761→    c.fillText(label, bx + 6, by + 9.5);
+   762→    c.textBaseline = 'alphabetic';
+   763→  }
+   764→
+   765→  // draw-tool preview
+   766→  if (overlay.drawPreview) {
+   767→    const dp = overlay.drawPreview;
+   768→    const p1 = toScreen({ x: dp.rect.x, y: dp.rect.y });
+   769→    const p2 = toScreen({ x: dp.rect.x + dp.rect.w, y: dp.rect.y + dp.rect.h });
+   770→    const x = Math.min(p1.x, p2.x);
+   771→    const y = Math.min(p1.y, p2.y);
+   772→    const w = Math.abs(p2.x - p1.x);
+   773→    const h = Math.abs(p2.y - p1.y);
+   774→    c.strokeStyle = ACCENT;
+   775→    c.lineWidth = 1;
+   776→    if ((dp.type === 'line' || dp.type === 'arrow') && dp.diagonal) {
+   777→      const a = toScreen({ x: dp.diagonal.x1, y: dp.diagonal.y1 });
+   778→      const b = toScreen({ x: dp.diagonal.x2, y: dp.diagonal.y2 });
+   779→      c.beginPath();
+   780→      c.moveTo(a.x, a.y);
+   781→      c.lineTo(b.x, b.y);
+   782→      c.stroke();
+   783→    } else if (dp.type === 'ellipse') {
+   784→      c.beginPath();
+   785→      c.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+   786→      c.stroke();
+   787→    } else if (dp.type === 'frame') {
+   788→      c.fillStyle = 'rgba(255,255,255,0.08)';
+   789→      c.fillRect(x, y, w, h);
+   790→      c.strokeRect(x, y, w, h);
+   791→    } else if (dp.type === 'text') {
+   792→      c.setLineDash([4, 3]);
+   793→      c.strokeRect(x, y, Math.max(w, 2), Math.max(h, 16));
+   794→      c.setLineDash([]);
+   795→    } else if (dp.type === 'star' || dp.type === 'polygon') {
+   796→      c.beginPath();
+   797→      const k = dp.type === 'star' ? 10 : 6;
+   798→      const rx = w / 2;
+   799→      const ry = h / 2;
+   800→      for (let i = 0; i < k; i++) {
+   801→        const r = dp.type === 'star' && i % 2 === 1 ? 0.45 : 1;
+   802→        const a = -Math.PI / 2 + (i * Math.PI) / (k / 2);
+   803→        const px = x + rx + rx * r * Math.cos(a);
+   804→        const py = y + ry + ry * r * Math.sin(a);
+   805→        if (i === 0) c.moveTo(px, py);
+   806→        else c.lineTo(px, py);
+   807→      }
+   808→      c.closePath();
+   809→      c.stroke();
+   810→    } else {
+   811→      c.strokeRect(x, y, w, h);
+   812→    }
+   813→  }
+   814→
+   815→  // marquee
+   816→  if (overlay.marquee) {
+   817→    const r = overlay.marquee;
+   818→    const p1 = toScreen({ x: r.x, y: r.y });
+   819→    const p2 = toScreen({ x: r.x + r.w, y: r.y + r.h });
+   820→    const x = Math.min(p1.x, p2.x);
+   821→    const y = Math.min(p1.y, p2.y);
+   822→    c.fillStyle = 'rgba(139,92,246,0.08)';
+   823→    c.fillRect(x, y, Math.abs(p2.x - p1.x), Math.abs(p2.y - p1.y));
+   824→    c.strokeStyle = ACCENT;
+   825→    c.lineWidth = 1;
+   826→    c.strokeRect(x, y, Math.abs(p2.x - p1.x), Math.abs(p2.y - p1.y));
+   827→  }
+   828→
+   829→  // eyedropper magnifier
+   830→  if (s.tool === 'eyedropper' && overlay.pointerWorld) {
+   831→    const p = toScreen(overlay.pointerWorld);
+   832→    c.strokeStyle = ACCENT;
+   833→    c.lineWidth = 1;
+   834→    roundRectPath(c, p.x + 12, p.y - 16, 64, 22, 4);
+   835→    c.fillStyle = '#1E1E1E';
+   836→    c.fill();
+   837→    c.stroke();
+   838→    c.fillStyle = overlay.pickedColor ?? '#FFFFFF';
+   839→    c.fillRect(p.x + 16, p.y - 12, 14, 14);
+   840→    c.fillStyle = '#FFFFFF';
+   841→    c.font = '600 10px Inter, system-ui, sans-serif';
+   842→    c.textBaseline = 'middle';
+   843→    c.fillText(overlay.pickedColor ?? '#—', p.x + 34, p.y - 5);
+   844→    c.textBaseline = 'alphabetic';
+   845→  }
+   846→
+   847→  // pen draft
+   848→  if (overlay.penDraft && overlay.penDraft.points.length > 0) {
+   849→    const draft = overlay.penDraft;
+   850→    c.save();
+   851→    c.translate(vp.x, vp.y);
+   852→    c.scale(vp.zoom, vp.zoom);
+   853→    const p = path2dForPoints(draft.points, false);
+   854→    c.strokeStyle = ACCENT;
+   855→    c.lineWidth = 1.5 / vp.zoom;
+   856→    c.stroke(p);
+   857→    if (draft.cursor && !draft.dragging) {
+   858→      const last = draft.points[draft.points.length - 1];
+   859→      c.setLineDash([4 / vp.zoom, 3 / vp.zoom]);
+   860→      c.beginPath();
+   861→      c.moveTo(last.x, last.y);
+   862→      c.lineTo(draft.cursor.x, draft.cursor.y);
+   863→      c.stroke();
+   864→      c.setLineDash([]);
+   865→    }
+   866→    // handles of last point while dragging
+   867→    if (draft.dragging) {
+   868→      const last = draft.points[draft.points.length - 1];
+   869→      if (last.hx !== 0 || last.hy !== 0) {
+   870→        c.strokeStyle = 'rgba(255,255,255,0.7)';
+   871→        c.lineWidth = 1 / vp.zoom;
+   872→        c.beginPath();
+   873→        c.moveTo(last.x - last.hx, last.y - last.hy);
+   874→        c.lineTo(last.x, last.y);
+   875→        c.lineTo(last.x + last.hx, last.y + last.hy);
+   876→        c.stroke();
+   877→      }
+   878→    }
+   879→    c.restore();
+   880→    // points in screen space
+   881→    draft.points.forEach((p, i) => {
+   882→      const pos = toScreen(p);
+   883→      if (i === 0) {
+   884→        // close-path target
+   885→        c.strokeStyle = ACCENT;
+   886→        c.lineWidth = 1.5;
+   887→        c.beginPath();
+   888→        c.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
+   889→        c.stroke();
+   890→        const near =
+   891→          draft.cursor && Math.hypot(draft.cursor.x - p.x, draft.cursor.y - p.y) * vp.zoom < 10;
+   892→        if (near) {
+   893→          c.fillStyle = ACCENT;
+   894→          c.fill();
+   895→        }
+   896→      }
+   897→      c.fillStyle = i === draft.points.length - 1 ? ACCENT : '#FFFFFF';
+   898→      c.strokeStyle = ACCENT;
+   899→      c.lineWidth = 1;
+   900→      c.beginPath();
+   901→      c.rect(pos.x - 3.5, pos.y - 3.5, 7, 7);
+   902→      c.fill();
+   903→      c.stroke();
+   904→    });
+   905→  }
+   906→}
+   907→
+   908→function drawNodeOutline(
+   909→  c: CanvasRenderingContext2D,
+   910→  doc: IrisDoc,
+   911→  n: IrisNode,
+   912→  vp: { x: number; y: number; zoom: number },
+   913→  color: string,
+   914→  width: number,
+   915→): void {
+   916→  const m = nodeWorldMatrix(doc, n);
+   917→  const corners = [
+   918→    mApply(m, 0, 0),
+   919→    mApply(m, n.w, 0),
+   920→    mApply(m, n.w, n.h),
+   921→    mApply(m, 0, n.h),
+   922→  ].map((p) => worldToScreen(vp, p.x, p.y));
+   923→  c.strokeStyle = color;
+   924→  c.lineWidth = width;
+   925→  c.beginPath();
+   926→  corners.forEach((p, i) => (i === 0 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y)));
+   927→  c.closePath();
+   928→  c.stroke();
+   929→}
+   930→
+   931→/* ------------------------------------------------------------------ */
+   932→/* Rulers                                                              */
+   933→/* ------------------------------------------------------------------ */
+   934→
+   935→function niceStep(minPx: number, zoom: number): number {
+   936→  const raw = minPx / zoom;
+   937→  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+   938→  for (const mult of [1, 2, 5, 10]) {
+   939→    if (mult * pow >= raw) return mult * pow;
+   940→  }
+   941→  return 10 * pow;
+   942→}
+   943→
+   944→function fmtTick(v: number): string {
+   945→  const r = Math.round(v * 100) / 100;
+   946→  return String(r);
+   947→}
+   948→
+   949→function drawRulers(
+   950→  c: CanvasRenderingContext2D,
+   951→  s: ReturnType<typeof useIris.getState>,
+   952→  W: number,
+   953→  H: number,
+   954→  ox: number,
+   955→  oy: number,
+   956→): void {
+   957→  const vp = s.viewport;
+   958→  c.fillStyle = RULER_BG;
+   959→  c.fillRect(0, 0, W, RULER);
+   960→  c.fillRect(0, 0, RULER, H);
+   961→  c.strokeStyle = RULER_BORDER;
+   962→  c.lineWidth = 1;
+   963→  c.beginPath();
+   964→  c.moveTo(0, RULER - 0.5);
+   965→  c.lineTo(W, RULER - 0.5);
+   966→  c.moveTo(RULER - 0.5, 0);
+   967→  c.lineTo(RULER - 0.5, H);
+   968→  c.stroke();
+   969→
+   970→  const step = niceStep(60, vp.zoom);
+   971→  const x0 = screenToWorld(vp, ox, 0).x;
+   972→  const x1 = screenToWorld(vp, W, 0).x;
+   973→  const y0 = screenToWorld(vp, 0, oy).y;
+   974→  const y1 = screenToWorld(vp, 0, H).y;
+   975→
+   976→  c.font = '9px Inter, system-ui, sans-serif';
+   977→  c.fillStyle = RULER_TEXT;
+   978→  c.strokeStyle = RULER_TEXT;
+   979→  c.textBaseline = 'alphabetic';
+   980→  c.textAlign = 'left';
+   981→
+   982→  c.beginPath();
+   983→  for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) {
+   984→    const sx = Math.round(x * vp.zoom + vp.x + ox) + 0.5;
+   985→    c.moveTo(sx, RULER - 5);
+   986→    c.lineTo(sx, RULER);
+   987→    c.fillText(fmtTick(x), sx + 3, RULER - 7);
+   988→  }
+   989→  for (let y = Math.ceil(y0 / step) * step; y <= y1; y += step) {
+   990→    const sy = Math.round(y * vp.zoom + vp.y + oy) + 0.5;
+   991→    c.moveTo(RULER - 5, sy);
+   992→    c.lineTo(RULER, sy);
+   993→    c.save();
+   994→    c.translate(RULER - 7, sy + 3);
+   995→    c.rotate(-Math.PI / 2);
+   996→    c.fillText(fmtTick(y), 0, 0);
+   997→    c.restore();
+   998→  }
+   999→  c.stroke();
+  1000→
+  1001→  // selection extent bands
+  1002→  if (s.selection.length > 0) {
+  1003→    const box = boundsOfNodes(s.doc, s.selection);
+  1004→    if (box) {
+  1005→      const sx1 = box.x * vp.zoom + vp.x + ox;
+  1006→      const sx2 = (box.x + box.w) * vp.zoom + vp.x + ox;
+  1007→      const sy1 = box.y * vp.zoom + vp.y + oy;
+  1008→      const sy2 = (box.y + box.h) * vp.zoom + vp.y + oy;
+  1009→      c.fillStyle = 'rgba(139,92,246,0.35)';
+  1010→      c.fillRect(sx1, RULER - 3, sx2 - sx1, 3);
+  1011→      c.fillRect(RULER - 3, sy1, 3, sy2 - sy1);
+  1012→    }
+  1013→  }
+  1014→
+  1015→  // guide markers on rulers
+  1016→  const guides = s.doc.settings;
+  1017→  if (guides) {
+  1018→    c.fillStyle = GUIDE_COLOR;
+  1019→    for (const gx of guides.guidesX ?? []) {
+  1020→      const px = Math.round(gx * vp.zoom + vp.x + ox) + 0.5;
+  1021→      c.beginPath();
+  1022→      c.moveTo(px, RULER - 8);
+  1023→      c.lineTo(px - 4, RULER - 1);
+  1024→      c.lineTo(px + 4, RULER - 1);
+  1025→      c.closePath();
+  1026→      c.fill();
+  1027→    }
+  1028→    for (const gy of guides.guidesY ?? []) {
+  1029→      const py = Math.round(gy * vp.zoom + vp.y + oy) + 0.5;
+  1030→      c.beginPath();
+  1031→      c.moveTo(RULER - 8, py);
+  1032→      c.lineTo(RULER - 1, py - 4);
+  1033→      c.lineTo(RULER - 1, py + 4);
+  1034→      c.closePath();
+  1035→      c.fill();
+  1036→    }
+  1037→  }
+  1038→
+  1039→  // pointer marker
+  1040→  if (overlay.pointerWorld) {
+  1041→    const px = overlay.pointerWorld.x * vp.zoom + vp.x + ox;
+  1042→    const py = overlay.pointerWorld.y * vp.zoom + vp.y + oy;
+  1043→    c.strokeStyle = '#9A9A9A';
+  1044→    c.beginPath();
+  1045→    c.moveTo(Math.round(px) + 0.5, 0);
+  1046→    c.lineTo(Math.round(px) + 0.5, RULER);
+  1047→    c.moveTo(0, Math.round(py) + 0.5);
+  1048→    c.lineTo(RULER, Math.round(py) + 0.5);
+  1049→    c.stroke();
+  1050→  }
+  1051→}
+  1052→
+  1053→/* ------------------------------------------------------------------ */
+  1054→/* Frame labels                                                        */
+  1055→/* ------------------------------------------------------------------ */
+  1056→
+  1057→function drawFrameLabels(
+  1058→  c: CanvasRenderingContext2D,
+  1059→  s: ReturnType<typeof useIris.getState>,
+  1060→  ox: number,
+  1061→  oy: number,
+  1062→  W: number,
+  1063→  H: number,
+  1064→): void {
+  1065→  const vp = s.viewport;
+  1066→  const page = s.doc.pagesById[s.currentPageId];
+  1067→  if (!page) return;
+  1068→  c.font = '11px Inter, system-ui, sans-serif';
+  1069→  c.textAlign = 'left';
+  1070→  for (const id of page.nodeIds) {
+  1071→    const n = s.doc.nodesById[id];
+  1072→    if (!n || n.type !== 'frame' || !n.visible) continue;
+  1073→    const box = nodeWorldAABB(s.doc, n);
+  1074→    const x = box.x * vp.zoom + vp.x + ox;
+  1075→    const y = box.y * vp.zoom + vp.y + oy;
+  1076→    if (x > W || y > H || x + box.w * vp.zoom < 0) continue;
+  1077→    if (y < RULER + 14) continue;
+  1078→    c.fillStyle = s.selection.includes(id) ? ACCENT_LIGHT : '#8A8A8A';
+  1079→    c.fillText(n.name, x, y - 6);
+  1080→  }
+  1081→}
+  1082→

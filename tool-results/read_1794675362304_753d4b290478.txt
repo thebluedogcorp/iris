@@ -1,0 +1,1832 @@
+     1→/**
+     2→ * Iris store (zustand): document, pages, selection, tool, viewport,
+     3→ * snapshot-based undo/redo with coalescing, clipboard, alignment,
+     4→ * grouping, z-order, doc settings (grid/guides/bg), style clipboard
+     5→ * and localStorage autosave.
+     6→ */
+     7→
+     8→import { create } from 'zustand';
+     9→import { useShallow } from 'zustand/react/shallow';
+    10→import {
+    11→  ID,
+    12→  IrisComment,
+    13→  IrisDoc,
+    14→  IrisNode,
+    15→  NodeType,
+    16→  FramePreset,
+    17→  createDefaultDoc,
+    18→  createNode,
+    19→  createPage,
+    20→  nextName,
+    21→  normalizeDoc,
+    22→  collectSubtree,
+    23→  isDescendantOf,
+    24→  isContainer,
+    25→  DEFAULT_SETTINGS,
+    26→  type DocSettings,
+    27→} from './model';
+    28→import {
+    29→  HandleKind,
+    30→  Mat,
+    31→  Rect,
+    32→  Viewport,
+    33→  boundsOfNodes,
+    34→  frameAtPoint,
+    35→  mApply,
+    36→  mApplyVec,
+    37→  mInvert,
+    38→  mMul,
+    39→  mTranslate,
+    40→  mRotate,
+    41→  nodeLocalMatrix,
+    42→  nodeWorldAABB,
+    43→  nodeWorldMatrix,
+    44→  parentWorldMatrix,
+    45→  screenToWorld,
+    46→  setNodeWorldTransform,
+    47→  unionRects,
+    48→} from './geometry';
+    49→import {
+    50→  createLibraryDoc,
+    51→  getStoredDoc,
+    52→  importDocIntoLibrary,
+    53→  migrateLegacyLibrary,
+    54→  renameDocInLibrary,
+    55→  saveDocToLibrary,
+    56→} from './library';
+    57→import { buildTemplate } from './templates';
+    58→import { IrisRoute, pushRoute, replaceRoute, routeFromLocation } from './router';
+    59→
+    60→export type Tool =
+    61→  | 'move'
+    62→  | 'hand'
+    63→  | 'frame'
+    64→  | 'rect'
+    65→  | 'ellipse'
+    66→  | 'line'
+    67→  | 'text'
+    68→  | 'pen'
+    69→  | 'polygon'
+    70→  | 'star'
+    71→  | 'arrow'
+    72→  | 'eyedropper'
+    73→  | 'image'
+    74→  | 'scale'
+    75→  | 'section'
+    76→  | 'slice'
+    77→  | 'pencil'
+    78→  | 'comment';
+    79→
+    80→export type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom' | 'hdist' | 'vdist';
+    81→
+    82→export type HandleId = HandleKind | 'rot';
+    83→
+    84→interface Snapshot {
+    85→  doc: IrisDoc;
+    86→  selection: ID[];
+    87→  currentPageId: ID;
+    88→}
+    89→
+    90→interface Clipboard {
+    91→  /** cloned nodes (subtrees of the copied roots), keyed by fresh-independent original ids */
+    92→  nodes: IrisNode[];
+    93→  rootIds: ID[];
+    94→  /** world bbox of the roots at copy time */
+    95→  origin: Rect;
+    96→  pageId: ID;
+    97→  count: number;
+    98→}
+    99→
+   100→export interface ContextMenuState {
+   101→  x: number;
+   102→  y: number;
+   103→  worldX: number;
+   104→  worldY: number;
+   105→}
+   106→
+   107→export interface ViewFlags {
+   108→  rulers: boolean;
+   109→  pixelGrid: boolean;
+   110→  outline: boolean;
+   111→}
+   112→
+   113→export type LeftPanelView = 'layers' | 'assets' | 'comments';
+   114→
+   115→export type RightPanelTab = 'design' | 'prototype';
+   116→
+   117→export interface ToastAction {
+   118→  label: string;
+   119→  run: () => void;
+   120→}
+   121→
+   122→export interface IrisStore {
+   123→  /* state */
+   124→  doc: IrisDoc;
+   125→  currentPageId: ID;
+   126→  selection: ID[];
+   127→  tool: Tool;
+   128→  viewport: Viewport;
+   129→  editingTextId: ID | null;
+   130→  editingPathId: ID | null;
+   131→  hoverId: ID | null;
+   132→  viewFlags: ViewFlags;
+   133→  past: Snapshot[];
+   134→  future: Snapshot[];
+   135→  clipboard: Clipboard | null;
+   136→  contextMenu: ContextMenuState | null;
+   137→  exportOpen: boolean;
+   138→  shortcutsOpen: boolean;
+   139→  toasts: { id: number; msg: string; action?: ToastAction }[];
+   140→  savedName: string | null;
+   141→  dirty: boolean;
+   142→  /** id of the library document backing the editor; null on the homepage */
+   143→  docId: ID | null;
+   144→  /** current screen: file browser (home) or an open document */
+   145→  route: IrisRoute;
+   146→  canvasSize: { w: number; h: number };
+   147→  /** copied style payload for copy/paste style */
+   148→  styleClipboard: Partial<IrisNode> | null;
+   149→
+   150→  /* editor chrome state */
+   151→  /** fullscreen prototype presentation */
+   152→  presenting: boolean;
+   153→  /** dev/inspect mode (SVG code panel) */
+   154→  inspectMode: boolean;
+   155→  /** share dialog open */
+   156→  shareOpen: boolean;
+   157→  /** active left-panel view */
+   158→  leftPanelView: LeftPanelView;
+   159→  leftPanelOpen: boolean;
+   160→  /** comment pin being edited */
+   161→  activeCommentId: ID | null;
+   162→  /** show comment pins on canvas */
+   163→  showComments: boolean;
+   164→  /** right panel tab (design / prototype) */
+   165→  rightTab: RightPanelTab;
+   166→
+   167→  /* tool / view */
+   168→  setTool: (tool: Tool) => void;
+   169→  setHover: (id: ID | null) => void;
+   170→  setCanvasSize: (w: number, h: number) => void;
+   171→  setViewFlag: (key: keyof ViewFlags, value: boolean) => void;
+   172→  setViewport: (vp: Viewport) => void;
+   173→  panBy: (dx: number, dy: number) => void;
+   174→  zoomAt: (factor: number, screenX?: number, screenY?: number) => void;
+   175→  setZoom: (z: number) => void;
+   176→  zoomToFit: () => void;
+   177→  zoomToSelection: () => void;
+   178→  zoomReset: () => void;
+   179→
+   180→  /* pages */
+   181→  setCurrentPage: (id: ID) => void;
+   182→  addPage: () => void;
+   183→  deletePage: (id: ID) => void;
+   184→  renamePage: (id: ID, name: string) => void;
+   185→  duplicatePage: (id: ID) => void;
+   186→  movePage: (id: ID, dir: -1 | 1) => void;
+   187→  setDocName: (name: string) => void;
+   188→
+   189→  /* selection */
+   190→  setSelection: (ids: ID[]) => void;
+   191→  toggleSelection: (id: ID) => void;
+   192→  selectAll: () => void;
+   193→  selectSameType: () => void;
+   194→
+   195→  /* history */
+   196→  pushHistory: (label?: string) => void;
+   197→  historyBegin: () => void;
+   198→  historyCommit: () => void;
+   199→  historyCancel: () => void;
+   200→  undo: () => void;
+   201→  redo: () => void;
+   202→
+   203→  /* nodes */
+   204→  addNode: (type: NodeType, patch: Partial<IrisNode>, parentId?: ID | null) => ID;
+   205→  updateNodes: (
+   206→    ids: ID[],
+   207→    patch: Partial<IrisNode> | ((n: IrisNode) => Partial<IrisNode>),
+   208→    opts?: { history?: boolean | string },
+   209→  ) => void;
+   210→  setNodeRect: (
+   211→    id: ID,
+   212→    rect: { x: number; y: number; w: number; h: number },
+   213→    opts?: { history?: boolean | string },
+   214→  ) => void;
+   215→  deleteNodes: (ids: ID[]) => void;
+   216→  deleteSelection: () => void;
+   217→  copySelection: () => void;
+   218→  cutSelection: () => void;
+   219→  paste: (at?: { x: number; y: number } | null) => void;
+   220→  duplicateSelection: (offset?: { dx: number; dy: number }) => ID[];
+   221→  groupSelection: () => void;
+   222→  ungroupSelection: () => void;
+   223→  reorderNodes: (ids: ID[], parentId: ID | null, index: number) => void;
+   224→  zorder: (mode: 'front' | 'back' | 'forward' | 'backward') => void;
+   225→  alignSelection: (mode: AlignMode) => void;
+   226→  resizeSelectionBox: (w: number, h: number) => void;
+   227→  moveSelectionWorld: (dx: number, dy: number, label?: string) => void;
+   228→  renameNode: (id: ID, name: string) => void;
+   229→
+   230→  /* transforms */
+   231→  flipSelection: (axis: 'h' | 'v') => void;
+   232→  rotateSelectionBy: (deg: number) => void;
+   233→  toggleLockSelection: () => void;
+   234→  unlockAllOnPage: () => void;
+   235→  toggleHideSelection: () => void;
+   236→
+   237→  /* style */
+   238→  copyStyle: () => void;
+   239→  pasteStyle: () => void;
+   240→
+   241→  /* doc settings */
+   242→  setSettings: (patch: Partial<DocSettings>) => void;
+   243→  setGridSettings: (patch: Partial<DocSettings['grid']>) => void;
+   244→  addGuide: (axis: 'x' | 'y', at: number) => void;
+   245→  moveGuide: (axis: 'x' | 'y', index: number, at: number) => void;
+   246→  removeGuide: (axis: 'x' | 'y', index: number) => void;
+   247→  clearGuides: () => void;
+   248→
+   249→  /* editing */
+   250→  setEditingText: (id: ID | null) => void;
+   251→  setEditingPath: (id: ID | null) => void;
+   252→
+   253→  /* images */
+   254→  importImage: (src: string, w: number, h: number, at?: { x: number; y: number }, parentId?: ID | null) => ID;
+   255→
+   256→  /* files */
+   257→  newDoc: () => void;
+   258→  newDocFromTemplate: (templateId: string) => void;
+   259→  loadDoc: (doc: unknown, savedName?: string | null, fitView?: boolean) => void;
+   260→  markSaved: (name: string) => void;
+   261→  openDoc: (id: ID, opts?: { push?: boolean }) => void;
+   262→  goHome: (opts?: { push?: boolean }) => void;
+   263→  /** re-read the URL route (popstate) and load/leave the doc accordingly */
+   264→  syncRoute: () => void;
+   265→  /** persist the active document immediately (clears the debounce timer) */
+   266→  flushSave: () => void;
+   267→
+   268→  /* ui */
+   269→  toast: (msg: string, action?: ToastAction) => void;
+   270→  dismissToast: (id: number) => void;
+   271→  openContextMenu: (x: number, y: number, worldX: number, worldY: number) => void;
+   272→  closeContextMenu: () => void;
+   273→  setExportOpen: (open: boolean) => void;
+   274→  setShortcutsOpen: (open: boolean) => void;
+   275→
+   276→  /* comments */
+   277→  addComment: (x: number, y: number, text: string) => ID;
+   278→  updateComment: (id: ID, patch: Partial<IrisComment>) => void;
+   279→  deleteComment: (id: ID) => void;
+   280→  setActiveComment: (id: ID | null) => void;
+   281→
+   282→  /* editor chrome */
+   283→  setPresenting: (v: boolean) => void;
+   284→  setInspectMode: (v: boolean) => void;
+   285→  setShareOpen: (v: boolean) => void;
+   286→  setLeftPanelView: (view: LeftPanelView, toggle?: boolean) => void;
+   287→  toggleLeftPanel: () => void;
+   288→  setRightTab: (tab: RightPanelTab) => void;
+   289→
+   290→  /* frame presets */
+   291→  addFramePreset: (preset: FramePreset) => ID;
+   292→}
+   293→
+   294→/* ------------------------------------------------------------------ */
+   295→
+   296→const HISTORY_LIMIT = 100;
+   297→const DEFAULT_VIEWPORT: Viewport = { x: 120, y: 120, zoom: 1 };
+   298→
+   299→function deepClone<T>(v: T): T {
+   300→  if (typeof structuredClone === 'function') return structuredClone(v);
+   301→  return JSON.parse(JSON.stringify(v)) as T;
+   302→}
+   303→
+   304→function draftOf(doc: IrisDoc): IrisDoc {
+   305→  return {
+   306→    name: doc.name,
+   307→    pages: doc.pages,
+   308→    pagesById: { ...doc.pagesById },
+   309→    nodesById: { ...doc.nodesById },
+   310→    settings: {
+   311→      ...doc.settings,
+   312→      grid: { ...doc.settings.grid },
+   313→      guidesX: [...doc.settings.guidesX],
+   314→      guidesY: [...doc.settings.guidesY],
+   315→    },
+   316→    comments: doc.comments ? doc.comments.map((c) => ({ ...c })) : [],
+   317→  };
+   318→}
+   319→
+   320→function putNode(draft: IrisDoc, id: ID, patch: Partial<IrisNode> | ((n: IrisNode) => Partial<IrisNode>)): void {
+   321→  const old = draft.nodesById[id];
+   322→  if (!old) return;
+   323→  draft.nodesById[id] = { ...old, ...(typeof patch === 'function' ? patch(old) : patch) };
+   324→}
+   325→
+   326→function putPage(draft: IrisDoc, id: ID, patch: Partial<{ name: string; nodeIds: ID[] }>): void {
+   327→  const old = draft.pagesById[id];
+   328→  if (!old) return;
+   329→  draft.pagesById[id] = { ...old, ...patch };
+   330→}
+   331→
+   332→function removeChildRef(draft: IrisDoc, pageId: ID, parentId: ID | null, childId: ID): void {
+   333→  if (parentId === null) {
+   334→    const page = draft.pagesById[pageId];
+   335→    if (page) putPage(draft, pageId, { nodeIds: page.nodeIds.filter((c) => c !== childId) });
+   336→  } else {
+   337→    const p = draft.nodesById[parentId];
+   338→    if (p) putNode(draft, parentId, { children: p.children.filter((c) => c !== childId) });
+   339→  }
+   340→}
+   341→
+   342→function insertChildRef(draft: IrisDoc, pageId: ID, parentId: ID | null, childId: ID, index?: number): void {
+   343→  if (parentId === null) {
+   344→    const page = draft.pagesById[pageId];
+   345→    if (!page) return;
+   346→    const list = page.nodeIds.filter((c) => c !== childId);
+   347→    const at = index === undefined || index < 0 || index > list.length ? list.length : index;
+   348→    list.splice(at, 0, childId);
+   349→    putPage(draft, pageId, { nodeIds: list });
+   350→  } else {
+   351→    const p = draft.nodesById[parentId];
+   352→    if (!p) return;
+   353→    const list = p.children.filter((c) => c !== childId);
+   354→    const at = index === undefined || index < 0 || index > list.length ? list.length : index;
+   355→    list.splice(at, 0, childId);
+   356→    putNode(draft, parentId, { children: list });
+   357→  }
+   358→}
+   359→
+   360→/** Extract rotation/x/y so the node's local matrix equals `m` (node size fixed). */
+   361→function applyLocalMatrix(node: IrisNode, m: Mat): void {
+   362→  const r = setNodeWorldTransform(node, m);
+   363→  node.x = r.x;
+   364→  node.y = r.y;
+   365→  node.rotation = r.rotation;
+   366→}
+   367→
+   368→/** Scale all descendants of a container by (sx, sy) in the container's local space. */
+   369→function scaleSubtree(draft: IrisDoc, rootId: ID, sx: number, sy: number, scaleFont: boolean): void {
+   370→  const root = draft.nodesById[rootId];
+   371→  if (!root || !root.children) return;
+   372→  const visit = (id: ID) => {
+   373→    const n = draft.nodesById[id];
+   374→    if (!n) return;
+   375→    const patch: Partial<IrisNode> = {
+   376→      x: n.x * sx,
+   377→      y: n.y * sy,
+   378→      w: Math.max(0.5, n.w * sx),
+   379→      h: Math.max(0.5, n.h * sy),
+   380→    };
+   381→    if (scaleFont) {
+   382→      const s = (Math.abs(sx) + Math.abs(sy)) / 2;
+   383→      if (Math.abs(s - 1) > 0.001) {
+   384→        patch.fontSize = Math.max(1, n.fontSize * s);
+   385→        patch.cornerRadius = Math.max(0, n.cornerRadius * s);
+   386→      }
+   387→    }
+   388→    if (n.points.length) {
+   389→      patch.points = n.points.map((p) => ({ x: p.x * sx, y: p.y * sy, hx: p.hx * sx, hy: p.hy * sy }));
+   390→    }
+   391→    putNode(draft, id, patch);
+   392→    n.children.forEach(visit);
+   393→  };
+   394→  root.children.forEach(visit);
+   395→}
+   396→
+   397→let toastSeq = 1;
+   398→let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+   399→let lastHistoryLabel: string | undefined;
+   400→let lastHistoryAt = 0;
+   401→/** pending interaction snapshot (drag begin/commit) */
+   402→let pendingSnapshot: Snapshot | null = null;
+   403→
+   404→/** Persist the active document into the library (callers debounce). */
+   405→function saveAutosave(state: IrisStore): void {
+   406→  if (typeof window === 'undefined') return;
+   407→  if (!state.docId) return;
+   408→  saveDocToLibrary(state.docId, state.doc, {
+   409→    currentPageId: state.currentPageId,
+   410→    viewport: state.viewport,
+   411→  });
+   412→}
+   413→
+   414→function scheduleAutosave(get: () => IrisStore): void {
+   415→  if (autosaveTimer) clearTimeout(autosaveTimer);
+   416→  autosaveTimer = setTimeout(() => saveAutosave(get()), 800);
+   417→}
+   418→
+   419→interface BootState {
+   420→  doc: IrisDoc;
+   421→  docId: ID;
+   422→  pageId: ID;
+   423→  viewport: Viewport;
+   424→}
+   425→
+   426→/**
+   427→ * One-time boot: run the legacy storage migration, then restore the document
+   428→ * named in the URL (?doc=<id>). Returns null when starting at the homepage.
+   429→ */
+   430→function bootIris(): BootState | null {
+   431→  if (typeof window === 'undefined') return null;
+   432→  migrateLegacyLibrary();
+   433→  const route = routeFromLocation();
+   434→  if (route.kind !== 'doc') return null;
+   435→  const stored = getStoredDoc(route.id);
+   436→  if (!stored) {
+   437→    replaceRoute({ kind: 'home' }); // stale URL — clean it up
+   438→    return null;
+   439→  }
+   440→  const doc = stored.doc;
+   441→  const pageId =
+   442→    stored.currentPageId && doc.pages.includes(stored.currentPageId) ? stored.currentPageId : doc.pages[0];
+   443→  return { doc, docId: route.id, pageId, viewport: stored.viewport ?? DEFAULT_VIEWPORT };
+   444→}
+   445→
+   446→/* ------------------------------------------------------------------ */
+   447→
+   448→export const useIris = create<IrisStore>()((set, get) => {
+   449→  // NOTE: the initial doc must be created exactly once — a second
+   450→  // createDefaultDoc() would produce a phantom currentPageId.
+   451→  const booted = bootIris();
+   452→  const initialDoc = booted?.doc ?? createDefaultDoc();
+   453→  const initialPageId = booted?.pageId ?? initialDoc.pages[0];
+   454→  const initialRoute: IrisRoute = booted ? { kind: 'doc', id: booted.docId } : { kind: 'home' };
+   455→  /**
+   456→   * Core mutation pipeline: optional history push, clone-on-write doc mutation,
+   457→   * selection sanity, autosave scheduling.
+   458→   */
+   459→  const commit = (
+   460→    mutator: (draft: IrisDoc) => void,
+   461→    opts?: { history?: boolean | string; selection?: ID[]; skipDirty?: boolean },
+   462→  ): void => {
+   463→    const state = get();
+   464→    const history = opts?.history === undefined ? true : opts.history;
+   465→    if (history !== false) {
+   466→      const label = typeof history === 'string' ? history : undefined;
+   467→      const now = Date.now();
+   468→      const coalesce = label !== undefined && label === lastHistoryLabel && now - lastHistoryAt < 700;
+   469→      if (!coalesce && state.doc.nodesById && state.doc.pagesById) {
+   470→        const snap: Snapshot = {
+   471→          doc: deepClone(state.doc),
+   472→          selection: [...state.selection],
+   473→          currentPageId: state.currentPageId,
+   474→        };
+   475→        set((s) => ({ past: [...s.past, snap].slice(-HISTORY_LIMIT), future: [] }));
+   476→      }
+   477→      lastHistoryLabel = label;
+   478→      lastHistoryAt = now;
+   479→    }
+   480→    const draft = draftOf(state.doc);
+   481→    mutator(draft);
+   482→    const pageId = get().currentPageId;
+   483→    let sel = get().selection.filter((id) => {
+   484→      const n = draft.nodesById[id];
+   485→      return !!n && n.pageId === pageId;
+   486→    });
+   487→    if (opts?.selection) {
+   488→      const valid = opts.selection.filter((id) => draft.nodesById[id] && draft.nodesById[id].pageId === pageId);
+   489→      if (valid.length || opts.selection.length === 0) sel = valid;
+   490→    }
+   491→    const st = get();
+   492→    const editingTextId = st.editingTextId && draft.nodesById[st.editingTextId] ? st.editingTextId : null;
+   493→    const editingPathId = st.editingPathId && draft.nodesById[st.editingPathId] ? st.editingPathId : null;
+   494→    set({ doc: draft, selection: sel, editingTextId, editingPathId, dirty: opts?.skipDirty ? st.dirty : true });
+   495→    scheduleAutosave(get);
+   496→  };
+   497→
+   498→  const currentPage = (): ID => get().currentPageId;
+   499→
+   500→  /** Shared paste/duplicate: clone source subtrees with a world-space offset. */
+   501→  const pasteOrDuplicate = (sourceNodes: IrisNode[], sourceRoots: IrisNode[], dx: number, dy: number): ID[] => {
+   502→    if (sourceRoots.length === 0) return [];
+   503→    const state = get();
+   504→    const pageId = currentPage();
+   505→    const idMap = new Map<ID, ID>();
+   506→    let counter = 0;
+   507→    for (const n of sourceNodes) {
+   508→      counter += 1;
+   509→      idMap.set(n.id, `${n.id}c${counter}${Math.random().toString(36).slice(2, 6)}`);
+   510→    }
+   511→    const cloned = sourceNodes.map((n) => ({
+   512→      ...n,
+   513→      id: idMap.get(n.id)!,
+   514→      pageId,
+   515→      children: n.children.map((c) => idMap.get(c)).filter((c): c is ID => !!c),
+   516→      points: n.points.map((p) => ({ ...p })),
+   517→      fillGradient: n.fillGradient ? { ...n.fillGradient } : null,
+   518→      shadow: n.shadow ? { ...n.shadow } : null,
+   519→    }));
+   520→    const worldTargets = new Map<ID, Mat>();
+   521→    for (const root of sourceRoots) {
+   522→      const W = nodeWorldMatrix(state.doc, root);
+   523→      worldTargets.set(idMap.get(root.id)!, mMul(mTranslate(dx, dy), W));
+   524→    }
+   525→    const newRootIds = sourceRoots.map((r) => idMap.get(r.id)!);
+   526→    commit(
+   527→      (draft) => {
+   528→        for (const c of cloned) {
+   529→          let parentId: ID | null = null;
+   530→          if (c.parentId) {
+   531→            const pid = idMap.get(c.parentId) ?? c.parentId;
+   532→            const pn = draft.nodesById[pid];
+   533→            if (pn && pn.pageId === pageId && isContainer(pn)) parentId = pid;
+   534→          }
+   535→          const node: IrisNode = { ...c, parentId };
+   536→          const target = worldTargets.get(c.id);
+   537→          if (target) applyLocalMatrix(node, target);
+   538→          draft.nodesById[c.id] = node;
+   539→        }
+   540→        for (const c of cloned) {
+   541→          const node = draft.nodesById[c.id];
+   542→          if (node) insertChildRef(draft, pageId, node.parentId, c.id, undefined);
+   543→        }
+   544→      },
+   545→      { history: 'paste', selection: newRootIds },
+   546→    );
+   547→    return newRootIds;
+   548→  };
+   549→
+   550→  const viewportCenter = (): { x: number; y: number } => {
+   551→    const { viewport, canvasSize } = get();
+   552→    return screenToWorld(viewport, Math.max(0, canvasSize.w / 2 - 10), Math.max(0, canvasSize.h / 2 - 10));
+   553→  };
+   554→
+   555→  /** Style fields copied by copy/paste style. */
+   556→  const STYLE_FIELDS: (keyof IrisNode)[] = [
+   557→    'fill',
+   558→    'stroke',
+   559→    'strokeWidth',
+   560→    'cornerRadius',
+   561→    'opacity',
+   562→    'dash',
+   563→    'fillGradient',
+   564→    'shadow',
+   565→    'blur',
+   566→    'blend',
+   567→    'fontFamily',
+   568→    'fontSize',
+   569→    'fontWeight',
+   570→    'textAlign',
+   571→    'lineHeight',
+   572→    'letterSpacing',
+   573→    'textCase',
+   574→    'underline',
+   575→    'strike',
+   576→  ];
+   577→
+   578→  return {
+   579→    doc: initialDoc,
+   580→    docId: booted?.docId ?? null,
+   581→    route: initialRoute,
+   582→    currentPageId: initialPageId,
+   583→    selection: [],
+   584→    tool: 'move',
+   585→    viewport: booted?.viewport ?? DEFAULT_VIEWPORT,
+   586→    editingTextId: null,
+   587→    editingPathId: null,
+   588→    hoverId: null,
+   589→    viewFlags: { rulers: true, pixelGrid: true, outline: false },
+   590→    past: [],
+   591→    future: [],
+   592→    clipboard: null,
+   593→    contextMenu: null,
+   594→    exportOpen: false,
+   595→    shortcutsOpen: false,
+   596→    toasts: [],
+   597→    savedName: null,
+   598→    dirty: false,
+   599→    canvasSize: { w: 800, h: 600 },
+   600→    styleClipboard: null,
+   601→    presenting: false,
+   602→    inspectMode: false,
+   603→    shareOpen: false,
+   604→    leftPanelView: 'layers',
+   605→    leftPanelOpen: true,
+   606→    activeCommentId: null,
+   607→    showComments: true,
+   608→    rightTab: 'design',
+   609→
+   610→    setLeftPanelView: (view, toggle) =>
+   611→      set((s) => {
+   612→        if (toggle && s.leftPanelView === view && s.leftPanelOpen) return { leftPanelOpen: false };
+   613→        return { leftPanelView: view, leftPanelOpen: true };
+   614→      }),
+   615→    toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
+   616→    setRightTab: (tab) => set({ rightTab: tab }),
+   617→    setPresenting: (v) => set({ presenting: v }),
+   618→    setInspectMode: (v) => set({ inspectMode: v }),
+   619→    setShareOpen: (v) => set({ shareOpen: v }),
+   620→
+   621→    /* ------------------------- comments ---------------------------- */
+   622→    addComment: (x, y, text) => {
+   623→      const c: IrisComment = {
+   624→        id: `cm${Math.random().toString(36).slice(2, 10)}`,
+   625→        pageId: get().currentPageId,
+   626→        x,
+   627→        y,
+   628→        text,
+   629→        author: 'You',
+   630→        ts: Date.now(),
+   631→        resolved: false,
+   632→      };
+   633→      commit(
+   634→        (draft) => {
+   635→          draft.comments = [...draft.comments, c];
+   636→        },
+   637→        { history: 'comment' },
+   638→      );
+   639→      return c.id;
+   640→    },
+   641→    updateComment: (id, patch) => {
+   642→      commit(
+   643→        (draft) => {
+   644→          draft.comments = draft.comments.map((c) => (c.id === id ? { ...c, ...patch } : c));
+   645→        },
+   646→        { history: 'comment' },
+   647→      );
+   648→    },
+   649→    deleteComment: (id) => {
+   650→      commit(
+   651→        (draft) => {
+   652→          draft.comments = draft.comments.filter((c) => c.id !== id);
+   653→        },
+   654→        { history: 'comment' },
+   655→      );
+   656→      set((s) => (s.activeCommentId === id ? { activeCommentId: null } : {}));
+   657→    },
+   658→    setActiveComment: (id) => set({ activeCommentId: id }),
+   659→
+   660→    /* ------------------------ frame presets ------------------------ */
+   661→    addFramePreset: (preset) => {
+   662→      const center = viewportCenter();
+   663→      const s = get();
+   664→      const frame = frameAtPoint(s.doc, s.currentPageId, center);
+   665→      const x = center.x - preset.w / 2;
+   666→      const y = center.y - preset.h / 2;
+   667→      let localX = x;
+   668→      let localY = y;
+   669→      if (frame) {
+   670→        const inv = mInvert(nodeWorldMatrix(s.doc, frame));
+   671→        const local = mApply(inv, x, y);
+   672→        localX = local.x;
+   673→        localY = local.y;
+   674→      }
+   675→      return get().addNode(
+   676→        'frame',
+   677→        {
+   678→          x: localX,
+   679→          y: localY,
+   680→          w: preset.w,
+   681→          h: preset.h,
+   682→          name: preset.name,
+   683→        },
+   684→        frame?.id ?? null,
+   685→      );
+   686→    },
+   687→
+   688→    /* ------------------------- tool / view ------------------------- */
+   689→    setTool: (tool) => {
+   690→      const st = get();
+   691→      if (st.tool === tool) return;
+   692→      if (st.editingTextId) set({ editingTextId: null });
+   693→      if (st.editingPathId) set({ editingPathId: null });
+   694→      set({ tool });
+   695→    },
+   696→    setHover: (id) => set({ hoverId: id }),
+   697→    setCanvasSize: (w, h) => set({ canvasSize: { w, h } }),
+   698→    setViewFlag: (key, value) => set((s) => ({ viewFlags: { ...s.viewFlags, [key]: value } })),
+   699→    setViewport: (vp) => {
+   700→      set({ viewport: vp });
+   701→      scheduleAutosave(get);
+   702→    },
+   703→    panBy: (dx, dy) => {
+   704→      set((s) => ({ viewport: { ...s.viewport, x: s.viewport.x + dx, y: s.viewport.y + dy } }));
+   705→      scheduleAutosave(get);
+   706→    },
+   707→    zoomAt: (factor, screenX, screenY) => {
+   708→      const { viewport, canvasSize } = get();
+   709→      const z = Math.min(256, Math.max(0.02, viewport.zoom * factor));
+   710→      if (Math.abs(z - viewport.zoom) < 1e-9) return;
+   711→      const cx = screenX ?? Math.max(0, canvasSize.w / 2 - 10);
+   712→      const cy = screenY ?? Math.max(0, canvasSize.h / 2 - 10);
+   713→      const k = z / viewport.zoom;
+   714→      set({ viewport: { zoom: z, x: cx - (cx - viewport.x) * k, y: cy - (cy - viewport.y) * k } });
+   715→      scheduleAutosave(get);
+   716→    },
+   717→    setZoom: (z) => get().zoomAt(z / get().viewport.zoom),
+   718→    zoomToFit: () => {
+   719→      const { doc, currentPageId, canvasSize } = get();
+   720→      const page = doc.pagesById[currentPageId];
+   721→      if (!page) return;
+   722→      const rects = page.nodeIds
+   723→        .map((id) => doc.nodesById[id])
+   724→        .filter(Boolean)
+   725→        .map((n) => nodeWorldAABB(doc, n));
+   726→      const bounds = rects.length ? unionRects(rects) : { x: 0, y: 0, w: 800, h: 600 };
+   727→      const cw = Math.max(50, canvasSize.w - 80);
+   728→      const ch = Math.max(50, canvasSize.h - 80);
+   729→      const zoom = Math.min(256, Math.max(0.02, Math.min(cw / Math.max(bounds.w, 1), ch / Math.max(bounds.h, 1)) * 0.9));
+   730→      set({
+   731→        viewport: {
+   732→          zoom,
+   733→          x: (canvasSize.w - 30) / 2 - (bounds.x + bounds.w / 2) * zoom,
+   734→          y: (canvasSize.h - 30) / 2 - (bounds.y + bounds.h / 2) * zoom,
+   735→        },
+   736→      });
+   737→      scheduleAutosave(get);
+   738→    },
+   739→    zoomToSelection: () => {
+   740→      const { doc, selection, canvasSize } = get();
+   741→      const bounds = boundsOfNodes(doc, selection);
+   742→      if (!bounds) return;
+   743→      const cw = Math.max(50, canvasSize.w - 120);
+   744→      const ch = Math.max(50, canvasSize.h - 120);
+   745→      const zoom = Math.min(64, Math.max(0.02, Math.min(cw / Math.max(bounds.w, 1), ch / Math.max(bounds.h, 1)) * 0.9));
+   746→      set({
+   747→        viewport: {
+   748→          zoom,
+   749→          x: (canvasSize.w - 30) / 2 - (bounds.x + bounds.w / 2) * zoom,
+   750→          y: (canvasSize.h - 30) / 2 - (bounds.y + bounds.h / 2) * zoom,
+   751→        },
+   752→      });
+   753→      scheduleAutosave(get);
+   754→    },
+   755→    zoomReset: () => get().setZoom(1),
+   756→
+   757→    /* ---------------------------- pages ---------------------------- */
+   758→    setCurrentPage: (id) => {
+   759→      const st = get();
+   760→      if (!st.doc.pagesById[id] || id === st.currentPageId) return;
+   761→      set({ currentPageId: id, selection: [], editingTextId: null, editingPathId: null, hoverId: null });
+   762→    },
+   763→    addPage: () => {
+   764→      const state = get();
+   765→      const page = createPage(`Page ${state.doc.pages.length + 1}`);
+   766→      commit(
+   767→        (draft) => {
+   768→          draft.pages = [...draft.pages, page.id];
+   769→          draft.pagesById[page.id] = page;
+   770→        },
+   771→        { history: 'page', selection: [] },
+   772→      );
+   773→      set({ currentPageId: page.id });
+   774→    },
+   775→    deletePage: (id) => {
+   776→      const state = get();
+   777→      if (state.doc.pages.length <= 1) {
+   778→        get().toast('A document needs at least one page');
+   779→        return;
+   780→      }
+   781→      const page = state.doc.pagesById[id];
+   782→      if (!page) return;
+   783→      const doomed = new Set<ID>();
+   784→      page.nodeIds.forEach((rootId) => collectSubtree(state.doc, rootId).forEach((n) => doomed.add(n.id)));
+   785→      const remaining = state.doc.pages.filter((p) => p !== id);
+   786→      commit(
+   787→        (draft) => {
+   788→          for (const nid of doomed) delete draft.nodesById[nid];
+   789→          draft.pages = remaining;
+   790→          delete draft.pagesById[id];
+   791→        },
+   792→        { history: 'page', selection: [] },
+   793→      );
+   794→      set({ currentPageId: remaining[0] });
+   795→      get().toast(`Deleted “${page.name}”`);
+   796→    },
+   797→    renamePage: (id, name) => {
+   798→      const trimmed = name.trim();
+   799→      if (!trimmed) return;
+   800→      commit((draft) => putPage(draft, id, { name: trimmed }), { history: false });
+   801→    },
+   802→    duplicatePage: (id) => {
+   803→      const state = get();
+   804→      const page = state.doc.pagesById[id];
+   805→      if (!page) return;
+   806→      const copy = createPage(`${page.name} copy`);
+   807→      const idMap = new Map<ID, ID>();
+   808→      const clone: IrisNode[] = [];
+   809→      const visit = (nid: ID): void => {
+   810→        const n = state.doc.nodesById[nid];
+   811→        if (!n) return;
+   812→        const fresh = {
+   813→          ...n,
+   814→          id: n.id,
+   815→          pageId: copy.id,
+   816→          points: n.points.map((p) => ({ ...p })),
+   817→          fillGradient: n.fillGradient ? { ...n.fillGradient } : null,
+   818→          shadow: n.shadow ? { ...n.shadow } : null,
+   819→        };
+   820→        clone.push(fresh);
+   821→        n.children.forEach(visit);
+   822→      };
+   823→      page.nodeIds.forEach(visit);
+   824→      // fresh ids must be generated up-front to remap children
+   825→      for (const n of clone) idMap.set(n.id, `${n.id}p${Math.random().toString(36).slice(2, 7)}`);
+   826→      const remapped = clone.map((n) => ({
+   827→        ...n,
+   828→        id: idMap.get(n.id)!,
+   829→        parentId: n.parentId ? (idMap.get(n.parentId) ?? null) : null,
+   830→        children: n.children.map((c) => idMap.get(c)).filter((c): c is ID => !!c),
+   831→      }));
+   832→      commit(
+   833→        (draft) => {
+   834→          draft.pages = [...draft.pages, copy.id];
+   835→          draft.pagesById[copy.id] = { ...copy, nodeIds: page.nodeIds.map((nid) => idMap.get(nid)!).filter(Boolean) };
+   836→          for (const n of remapped) draft.nodesById[n.id] = n;
+   837→        },
+   838→        { history: 'page', selection: [] },
+   839→      );
+   840→      set({ currentPageId: copy.id });
+   841→      get().toast(`Duplicated “${page.name}”`);
+   842→    },
+   843→    movePage: (id, dir) => {
+   844→      const state = get();
+   845→      const i = state.doc.pages.indexOf(id);
+   846→      const j = i + dir;
+   847→      if (i < 0 || j < 0 || j >= state.doc.pages.length) return;
+   848→      commit(
+   849→        (draft) => {
+   850→          const pages = [...draft.pages];
+   851→          const [moved] = pages.splice(i, 1);
+   852→          pages.splice(j, 0, moved);
+   853→          draft.pages = pages;
+   854→        },
+   855→        { history: 'page' },
+   856→      );
+   857→    },
+   858→    setDocName: (name) => {
+   859→      const trimmed = name.trim();
+   860→      if (!trimmed) return;
+   861→      set((s) => ({ doc: { ...s.doc, name: trimmed }, dirty: true }));
+   862→      const { docId } = get();
+   863→      if (docId) renameDocInLibrary(docId, trimmed);
+   864→      scheduleAutosave(get);
+   865→    },
+   866→
+   867→    /* -------------------------- selection -------------------------- */
+   868→    setSelection: (ids) => {
+   869→      const { doc, currentPageId } = get();
+   870→      const page = doc.pagesById[currentPageId];
+   871→      const onPage = new Set<ID>();
+   872→      const addTree = (nid: ID) => {
+   873→        onPage.add(nid);
+   874→        doc.nodesById[nid]?.children.forEach(addTree);
+   875→      };
+   876→      page?.nodeIds.forEach(addTree);
+   877→      const sel: ID[] = [];
+   878→      for (const id of ids) {
+   879→        if (onPage.has(id) && !sel.includes(id)) sel.push(id);
+   880→      }
+   881→      set({ selection: sel });
+   882→    },
+   883→    toggleSelection: (id) => {
+   884→      const sel = get().selection;
+   885→      get().setSelection(sel.includes(id) ? sel.filter((s) => s !== id) : [...sel, id]);
+   886→    },
+   887→    selectAll: () => {
+   888→      const { doc, currentPageId } = get();
+   889→      const page = doc.pagesById[currentPageId];
+   890→      if (page) set({ selection: [...page.nodeIds] });
+   891→    },
+   892→    selectSameType: () => {
+   893→      const { doc, selection, currentPageId } = get();
+   894→      const page = doc.pagesById[currentPageId];
+   895→      if (!page || selection.length === 0) return;
+   896→      const types = new Set(selection.map((id) => doc.nodesById[id]?.type).filter(Boolean) as NodeType[]);
+   897→      const out: ID[] = [];
+   898→      const visit = (nid: ID): void => {
+   899→        const n = doc.nodesById[nid];
+   900→        if (!n) return;
+   901→        if (types.has(n.type)) out.push(nid);
+   902→        n.children.forEach(visit);
+   903→      };
+   904→      page.nodeIds.forEach(visit);
+   905→      // keep only top-level entries (drop nested descendants of the selection)
+   906→      const top = out.filter((id) => {
+   907→        let p = doc.nodesById[id]?.parentId;
+   908→        while (p) {
+   909→          if (out.includes(p)) return false;
+   910→          p = doc.nodesById[p]?.parentId;
+   911→        }
+   912→        return true;
+   913→      });
+   914→      if (top.length) set({ selection: top });
+   915→      get().toast(`Selected ${top.length} object${top.length === 1 ? '' : 's'} of the same type`);
+   916→    },
+   917→
+   918→    /* --------------------------- history --------------------------- */
+   919→    pushHistory: (label) => {
+   920→      commit(() => {}, { history: label });
+   921→    },
+   922→    historyBegin: () => {
+   923→      const s = get();
+   924→      pendingSnapshot = {
+   925→        doc: deepClone(s.doc),
+   926→        selection: [...s.selection],
+   927→        currentPageId: s.currentPageId,
+   928→      };
+   929→    },
+   930→    historyCommit: () => {
+   931→      if (!pendingSnapshot) return;
+   932→      const snap = pendingSnapshot;
+   933→      pendingSnapshot = null;
+   934→      set((s) => ({ past: [...s.past, snap].slice(-HISTORY_LIMIT), future: [] }));
+   935→      lastHistoryLabel = undefined;
+   936→    },
+   937→    historyCancel: () => {
+   938→      pendingSnapshot = null;
+   939→    },
+   940→    undo: () => {
+   941→      const s = get();
+   942→      if (s.past.length === 0) return;
+   943→      const prev = s.past[s.past.length - 1];
+   944→      const current: Snapshot = {
+   945→        doc: deepClone(s.doc),
+   946→        selection: [...s.selection],
+   947→        currentPageId: s.currentPageId,
+   948→      };
+   949→      const validPage = prev.doc.pages.includes(prev.currentPageId) ? prev.currentPageId : prev.doc.pages[0];
+   950→      const validSelection = prev.selection.filter((id) => prev.doc.nodesById[id] && prev.doc.nodesById[id].pageId === validPage);
+   951→      set({
+   952→        doc: prev.doc,
+   953→        selection: validSelection,
+   954→        currentPageId: validPage,
+   955→        past: s.past.slice(0, -1),
+   956→        future: [current, ...s.future].slice(0, HISTORY_LIMIT),
+   957→        editingTextId: null,
+   958→        editingPathId: null,
+   959→        dirty: true,
+   960→      });
+   961→      lastHistoryLabel = undefined;
+   962→      scheduleAutosave(get);
+   963→    },
+   964→    redo: () => {
+   965→      const s = get();
+   966→      if (s.future.length === 0) return;
+   967→      const next = s.future[0];
+   968→      const current: Snapshot = {
+   969→        doc: deepClone(s.doc),
+   970→        selection: [...s.selection],
+   971→        currentPageId: s.currentPageId,
+   972→      };
+   973→      const validPage = next.doc.pages.includes(next.currentPageId) ? next.currentPageId : next.doc.pages[0];
+   974→      const validSelection = next.selection.filter((id) => next.doc.nodesById[id] && next.doc.nodesById[id].pageId === validPage);
+   975→      set({
+   976→        doc: next.doc,
+   977→        selection: validSelection,
+   978→        currentPageId: validPage,
+   979→        past: [...s.past, current].slice(-HISTORY_LIMIT),
+   980→        future: s.future.slice(1),
+   981→        editingTextId: null,
+   982→        editingPathId: null,
+   983→        dirty: true,
+   984→      });
+   985→      lastHistoryLabel = undefined;
+   986→      scheduleAutosave(get);
+   987→    },
+   988→
+   989→    /* ---------------------------- nodes ---------------------------- */
+   990→    addNode: (type, patch, parentId) => {
+   991→      const state = get();
+   992→      const pageId = currentPage();
+   993→      const node = createNode(type, pageId, {
+   994→        name: nextName(state.doc, type),
+   995→        ...patch,
+   996→        parentId: parentId ?? null,
+   997→      });
+   998→      commit(
+   999→        (draft) => {
+  1000→          draft.nodesById[node.id] = node;
+  1001→          insertChildRef(draft, pageId, parentId ?? null, node.id);
+  1002→        },
+  1003→        { selection: [node.id] },
+  1004→      );
+  1005→      return node.id;
+  1006→    },
+  1007→
+  1008→    updateNodes: (ids, patch, opts) => {
+  1009→      commit(
+  1010→        (draft) => {
+  1011→          for (const id of ids) putNode(draft, id, patch);
+  1012→        },
+  1013→        { history: opts?.history },
+  1014→      );
+  1015→    },
+  1016→
+  1017→    setNodeRect: (id, rect, opts) => {
+  1018→      commit(
+  1019→        (draft) => {
+  1020→          const n = draft.nodesById[id];
+  1021→          if (!n) return;
+  1022→          const oldW = n.w;
+  1023→          const oldH = n.h;
+  1024→          const w = Math.max(n.type === 'line' || n.type === 'arrow' ? 0 : 1, rect.w);
+  1025→          const h = Math.max(n.type === 'line' || n.type === 'arrow' ? 0 : 1, rect.h);
+  1026→          putNode(draft, id, { x: rect.x, y: rect.y, w, h });
+  1027→          if (isContainer(n) && oldW > 0.01 && oldH > 0.01) {
+  1028→            scaleSubtree(draft, id, w / oldW, h / oldH, true);
+  1029→          } else if (n.type === 'text' && Math.abs(w - oldW) > 0.01 && Math.abs(h - oldH) > 0.01) {
+  1030→            const s = ((w / oldW) * 0.5 + (h / oldH) * 0.5);
+  1031→            putNode(draft, id, { fontSize: Math.max(1, n.fontSize * s), autoWidth: false });
+  1032→          } else if (n.type === 'text' && Math.abs(w - oldW) > 0.01) {
+  1033→            putNode(draft, id, { autoWidth: false });
+  1034→          }
+  1035→        },
+  1036→        { history: opts?.history },
+  1037→      );
+  1038→    },
+  1039→
+  1040→    deleteNodes: (ids) => {
+  1041→      if (ids.length === 0) return;
+  1042→      const state = get();
+  1043→      const pageId = currentPage();
+  1044→      const doomed = new Set<ID>();
+  1045→      for (const id of ids) collectSubtree(state.doc, id).forEach((n) => doomed.add(n.id));
+  1046→      if (doomed.size === 0) return;
+  1047→      commit(
+  1048→        (draft) => {
+  1049→          for (const nid of doomed) {
+  1050→            const n = draft.nodesById[nid];
+  1051→            if (n) removeChildRef(draft, pageId, n.parentId, nid);
+  1052→            delete draft.nodesById[nid];
+  1053→          }
+  1054→        },
+  1055→        { history: 'delete', selection: [] },
+  1056→      );
+  1057→      get().toast(`Deleted ${doomed.size} object${doomed.size === 1 ? '' : 's'}`, {
+  1058→        label: 'Undo',
+  1059→        run: () => get().undo(),
+  1060→      });
+  1061→    },
+  1062→    deleteSelection: () => get().deleteNodes(get().selection),
+  1063→
+  1064→    copySelection: () => {
+  1065→      const state = get();
+  1066→      if (state.selection.length === 0) return;
+  1067→      const roots = state.selection.map((id) => state.doc.nodesById[id]).filter(Boolean) as IrisNode[];
+  1068→      const nodes: IrisNode[] = [];
+  1069→      roots.forEach((r) => collectSubtree(state.doc, r.id).forEach((n) => nodes.push({ ...n, points: n.points.map((p) => ({ ...p })) })));
+  1070→      const origin = boundsOfNodes(state.doc, state.selection);
+  1071→      set({
+  1072→        clipboard: origin
+  1073→          ? { nodes, rootIds: roots.map((r) => r.id), origin, pageId: state.currentPageId, count: 0 }
+  1074→          : null,
+  1075→      });
+  1076→      get().toast(`Copied ${roots.length} object${roots.length > 1 ? 's' : ''}`);
+  1077→    },
+  1078→
+  1079→    cutSelection: () => {
+  1080→      get().copySelection();
+  1081→      get().deleteSelection();
+  1082→    },
+  1083→
+  1084→    paste: (at) => {
+  1085→      const state = get();
+  1086→      const clip = state.clipboard;
+  1087→      if (!clip) {
+  1088→        get().toast('Clipboard is empty');
+  1089→        return;
+  1090→      }
+  1091→      const pageId = currentPage();
+  1092→      const dx = at ? at.x - clip.origin.x : 12 * (clip.count + 1);
+  1093→      const dy = at ? at.y - clip.origin.y : 12 * (clip.count + 1);
+  1094→      set({ clipboard: { ...clip, count: clip.count + 1 } });
+  1095→      const rootIds = clip.rootIds;
+  1096→      const roots = rootIds.map((id) => clip.nodes.find((n) => n.id === id)).filter(Boolean) as IrisNode[];
+  1097→      const ids = new Set<ID>();
+  1098→      const byId = Object.fromEntries(clip.nodes.map((n) => [n.id, n])) as Record<ID, IrisNode>;
+  1099→      const fakeDoc = { pages: [], pagesById: {}, nodesById: byId, name: '', settings: DEFAULT_SETTINGS } as unknown as IrisDoc;
+  1100→      roots.forEach((r) => collectSubtree(fakeDoc, r.id).forEach((n) => ids.add(n.id)));
+  1101→      const nodes = clip.nodes.filter((n) => ids.has(n.id));
+  1102→      const newRoots = pasteOrDuplicate(nodes, roots, dx, dy);
+  1103→      if (newRoots.length) get().setSelection(newRoots);
+  1104→    },
+  1105→
+  1106→    duplicateSelection: (offset) => {
+  1107→      const state = get();
+  1108→      if (state.selection.length === 0) return [];
+  1109→      const { dx = 10, dy = 10 } = offset ?? {};
+  1110→      const roots = state.selection.map((id) => state.doc.nodesById[id]).filter(Boolean) as IrisNode[];
+  1111→      const nodes: IrisNode[] = [];
+  1112→      roots.forEach((r) => collectSubtree(state.doc, r.id).forEach((n) => nodes.push(n)));
+  1113→      return pasteOrDuplicate(nodes, roots, dx, dy);
+  1114→    },
+  1115→
+  1116→    groupSelection: () => {
+  1117→      const state = get();
+  1118→      const nodes = state.selection.map((id) => state.doc.nodesById[id]).filter(Boolean) as IrisNode[];
+  1119→      if (nodes.length === 0) return;
+  1120→      const parentId = nodes[0].parentId;
+  1121→      if (nodes.some((n) => n.parentId !== parentId)) {
+  1122→        get().toast('Grouping requires objects with the same parent');
+  1123→        return;
+  1124→      }
+  1125→      const pageId = currentPage();
+  1126→      const rects = nodes.map((n) => {
+  1127→        const m = nodeLocalMatrix(n);
+  1128→        return {
+  1129→          x: Math.min(mApplyVec(m, 0, 0).x, mApplyVec(m, n.w, 0).x, mApplyVec(m, n.w, n.h).x, mApplyVec(m, 0, n.h).x),
+  1130→          y: Math.min(mApplyVec(m, 0, 0).y, mApplyVec(m, n.w, 0).y, mApplyVec(m, n.w, n.h).y, mApplyVec(m, 0, n.h).y),
+  1131→        };
+  1132→      });
+  1133→      const maxRec = nodes.map((n) => {
+  1134→        const m = nodeLocalMatrix(n);
+  1135→        return {
+  1136→          x: Math.max(mApplyVec(m, 0, 0).x, mApplyVec(m, n.w, 0).x, mApplyVec(m, n.w, n.h).x, mApplyVec(m, 0, n.h).x),
+  1137→          y: Math.max(mApplyVec(m, 0, 0).y, mApplyVec(m, n.w, 0).y, mApplyVec(m, n.w, n.h).y, mApplyVec(m, 0, n.h).y),
+  1138→        };
+  1139→      });
+  1140→      const x = Math.min(...rects.map((r) => r.x));
+  1141→      const y = Math.min(...rects.map((r) => r.y));
+  1142→      const maxX = Math.max(...maxRec.map((r) => r.x));
+  1143→      const maxY = Math.max(...maxRec.map((r) => r.y));
+  1144→      const group = createNode('group', pageId, {
+  1145→        name: nextName(state.doc, 'group'),
+  1146→        x,
+  1147→        y,
+  1148→        w: Math.max(1, maxX - x),
+  1149→        h: Math.max(1, maxY - y),
+  1150→        parentId,
+  1151→        children: [],
+  1152→      });
+  1153→      const ordered = nodes.slice().sort((a, b) => {
+  1154→        const list = parentId === null ? state.doc.pagesById[pageId].nodeIds : state.doc.nodesById[parentId].children;
+  1155→        return list.indexOf(a.id) - list.indexOf(b.id);
+  1156→      });
+  1157→      const insertAt = (() => {
+  1158→        const list = parentId === null ? state.doc.pagesById[pageId].nodeIds : state.doc.nodesById[parentId].children;
+  1159→        const idx = Math.max(...ordered.map((n) => list.indexOf(n.id)));
+  1160→        return idx - ordered.length + 1; // slot of the topmost selected after removals
+  1161→      })();
+  1162→      commit(
+  1163→        (draft) => {
+  1164→          for (const n of ordered) removeChildRef(draft, pageId, parentId, n.id);
+  1165→          draft.nodesById[group.id] = { ...group, children: ordered.map((n) => n.id) };
+  1166→          for (const n of ordered) {
+  1167→            putNode(draft, n.id, { parentId: group.id, x: n.x - x, y: n.y - y });
+  1168→          }
+  1169→          insertChildRef(draft, pageId, parentId, group.id, insertAt);
+  1170→        },
+  1171→        { history: 'group', selection: [group.id] },
+  1172→      );
+  1173→    },
+  1174→
+  1175→    ungroupSelection: () => {
+  1176→      const state = get();
+  1177→      const containers = state.selection
+  1178→        .map((id) => state.doc.nodesById[id])
+  1179→        .filter((n): n is IrisNode => !!n && isContainer(n));
+  1180→      if (containers.length === 0) {
+  1181→        get().toast('Select a group or frame to ungroup');
+  1182→        return;
+  1183→      }
+  1184→      const pageId = currentPage();
+  1185→      const freed: ID[] = [];
+  1186→      commit(
+  1187→        (draft) => {
+  1188→          for (const c of containers) {
+  1189→            const node = draft.nodesById[c.id];
+  1190→            if (!node) continue;
+  1191→            const parentId = node.parentId;
+  1192→            const list = parentId === null ? draft.pagesById[pageId].nodeIds : draft.nodesById[parentId].children;
+  1193→            const index = list.indexOf(c.id);
+  1194→            removeChildRef(draft, pageId, parentId, c.id);
+  1195→            const childIds = [...node.children];
+  1196→            let at = index < 0 ? undefined : index;
+  1197→            for (const childId of childIds) {
+  1198→              const child = draft.nodesById[childId];
+  1199→              if (!child) continue;
+  1200→              const m = mMul(nodeLocalMatrix(node), nodeLocalMatrix(child));
+  1201→              const fresh = { ...child };
+  1202→              applyLocalMatrix(fresh, m);
+  1203→              fresh.parentId = parentId;
+  1204→              draft.nodesById[childId] = fresh;
+  1205→              insertChildRef(draft, pageId, parentId, childId, at);
+  1206→              at = at === undefined ? undefined : at + 1;
+  1207→              freed.push(childId);
+  1208→            }
+  1209→            delete draft.nodesById[c.id];
+  1210→          }
+  1211→        },
+  1212→        { history: 'ungroup', selection: freed },
+  1213→      );
+  1214→    },
+  1215→
+  1216→    reorderNodes: (ids, parentId, index) => {
+  1217→      const state = get();
+  1218→      const pageId = currentPage();
+  1219→      const moving = ids.map((id) => state.doc.nodesById[id]).filter(Boolean) as IrisNode[];
+  1220→      if (moving.length === 0) return;
+  1221→      for (const n of moving) {
+  1222→        if (parentId && (n.id === parentId || isDescendantOf(state.doc, parentId, n.id))) {
+  1223→          get().toast('Cannot drop an object into its own children');
+  1224→          return;
+  1225→        }
+  1226→      }
+  1227→      // world matrices before the move
+  1228→      const worlds = new Map<ID, Mat>();
+  1229→      moving.forEach((n) => worlds.set(n.id, nodeWorldMatrix(state.doc, n)));
+  1230→      commit(
+  1231→        (draft) => {
+  1232→          for (const n of moving) removeChildRef(draft, pageId, n.parentId, n.id);
+  1233→          let at = index;
+  1234→          for (const n of moving) {
+  1235→            insertChildRef(draft, pageId, parentId, n.id, at);
+  1236→            at = at + 1;
+  1237→          }
+  1238→          for (const n of moving) {
+  1239→            const world = worlds.get(n.id)!;
+  1240→            const fresh = draft.nodesById[n.id];
+  1241→            if (!fresh) continue;
+  1242→            const updated = { ...fresh, parentId };
+  1243→            const P = parentId === null ? { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 } : nodeWorldMatrix(draft, draft.nodesById[parentId]);
+  1244→            applyLocalMatrix(updated, mMul(mInvert(P), world));
+  1245→            draft.nodesById[n.id] = updated;
+  1246→          }
+  1247→        },
+  1248→        { history: 'reorder', selection: ids },
+  1249→      );
+  1250→    },
+  1251→
+  1252→    zorder: (mode) => {
+  1253→      const state = get();
+  1254→      const pageId = currentPage();
+  1255→      const sel = state.selection;
+  1256→      if (sel.length === 0) return;
+  1257→      commit(
+  1258→        (draft) => {
+  1259→          const listRef = (parentId: ID | null): ID[] =>
+  1260→            parentId === null ? [...(draft.pagesById[pageId]?.nodeIds ?? [])] : [...(draft.nodesById[parentId]?.children ?? [])];
+  1261→          const setList = (parentId: ID | null, list: ID[]) => {
+  1262→            if (parentId === null) putPage(draft, pageId, { nodeIds: list });
+  1263→            else putNode(draft, parentId, { children: list });
+  1264→          };
+  1265→          for (const id of sel) {
+  1266→            const n = draft.nodesById[id];
+  1267→            if (!n) continue;
+  1268→            const list = listRef(n.parentId);
+  1269→            const i = list.indexOf(id);
+  1270→            if (i < 0) continue;
+  1271→            list.splice(i, 1);
+  1272→            if (mode === 'front') list.push(id);
+  1273→            else if (mode === 'back') list.unshift(id);
+  1274→            else if (mode === 'forward') list.splice(Math.min(list.length, i + 1), 0, id);
+  1275→            else list.splice(Math.max(0, i - 1), 0, id);
+  1276→            setList(n.parentId, list);
+  1277→          }
+  1278→        },
+  1279→        { history: 'zorder' },
+  1280→      );
+  1281→    },
+  1282→
+  1283→    alignSelection: (mode) => {
+  1284→      const state = get();
+  1285→      const nodes = state.selection.map((id) => state.doc.nodesById[id]).filter(Boolean) as IrisNode[];
+  1286→      if (nodes.length === 0) return;
+  1287→      const doc = state.doc;
+  1288→      const rects = new Map<ID, Rect>(nodes.map((n) => [n.id, nodeWorldAABB(doc, n)]));
+  1289→      let ref: Rect;
+  1290→      if (nodes.length > 1) {
+  1291→        ref = unionRects([...rects.values()]);
+  1292→      } else {
+  1293→        // single object: align within its parent frame (no-op at page top level, like Figma)
+  1294→        const n = nodes[0];
+  1295→        let p = n.parentId ? doc.nodesById[n.parentId] : undefined;
+  1296→        while (p && p.type !== 'frame' && p.parentId) p = doc.nodesById[p.parentId];
+  1297→        if (!p || p.type !== 'frame') return;
+  1298→        ref = nodeWorldAABB(doc, p);
+  1299→      }
+  1300→      const moves: { id: ID; dx: number; dy: number }[] = [];
+  1301→      if (mode === 'hdist' || mode === 'vdist') {
+  1302→        if (nodes.length < 2) return;
+  1303→        const horiz = mode === 'hdist';
+  1304→        const sorted = nodes.slice().sort((a, b) => {
+  1305→          const ra = rects.get(a.id)!;
+  1306→          const rb = rects.get(b.id)!;
+  1307→          return horiz ? ra.x - rb.x : ra.y - rb.y;
+  1308→        });
+  1309→        const first = rects.get(sorted[0].id)!;
+  1310→        const last = rects.get(sorted[sorted.length - 1].id)!;
+  1311→        const span = horiz ? last.x + last.w - first.x : last.y + last.h - first.y;
+  1312→        const total = sorted.reduce((acc, n) => acc + (horiz ? rects.get(n.id)!.w : rects.get(n.id)!.h), 0);
+  1313→        const gap = (span - total) / (sorted.length - 1);
+  1314→        let cursor = horiz ? first.x : first.y;
+  1315→        for (const n of sorted) {
+  1316→          const r = rects.get(n.id)!;
+  1317→          const target = cursor;
+  1318→          const cur = horiz ? r.x : r.y;
+  1319→          moves.push({ id: n.id, dx: horiz ? target - cur : 0, dy: horiz ? 0 : target - cur });
+  1320→          cursor += (horiz ? r.w : r.h) + gap;
+  1321→        }
+  1322→      } else {
+  1323→        for (const n of nodes) {
+  1324→          const r = rects.get(n.id)!;
+  1325→          let dx = 0;
+  1326→          let dy = 0;
+  1327→          if (mode === 'left') dx = ref.x - r.x;
+  1328→          if (mode === 'hcenter') dx = ref.x + ref.w / 2 - (r.x + r.w / 2);
+  1329→          if (mode === 'right') dx = ref.x + ref.w - (r.x + r.w);
+  1330→          if (mode === 'top') dy = ref.y - r.y;
+  1331→          if (mode === 'vcenter') dy = ref.y + ref.h / 2 - (r.y + r.h / 2);
+  1332→          if (mode === 'bottom') dy = ref.y + ref.h - (r.y + r.h);
+  1333→          moves.push({ id: n.id, dx, dy });
+  1334→        }
+  1335→      }
+  1336→      commit(
+  1337→        (draft) => {
+  1338→          for (const mv of moves) {
+  1339→            const n = draft.nodesById[mv.id];
+  1340→            if (!n || (mv.dx === 0 && mv.dy === 0)) continue;
+  1341→            const P = parentWorldMatrix(draft, n);
+  1342→            const local = mApplyVec(mInvert(P), mv.dx, mv.dy);
+  1343→            putNode(draft, mv.id, { x: n.x + local.x, y: n.y + local.y });
+  1344→          }
+  1345→        },
+  1346→        { history: 'align' },
+  1347→      );
+  1348→    },
+  1349→
+  1350→    resizeSelectionBox: (w, h) => {
+  1351→      const state = get();
+  1352→      const box = boundsOfNodes(state.doc, state.selection);
+  1353→      if (!box || box.w < 0.01 || box.h < 0.01 || w <= 0 || h <= 0) return;
+  1354→      const sx = w / box.w;
+  1355→      const sy = h / box.h;
+  1356→      const doc = state.doc;
+  1357→      const targets = state.selection.map((id) => doc.nodesById[id]).filter(Boolean) as IrisNode[];
+  1358→      commit(
+  1359→        (draft) => {
+  1360→          for (const n of targets) {
+  1361→            const a = nodeWorldAABB(doc, n);
+  1362→            const nx = box.x + (a.x - box.x) * sx;
+  1363→            const ny = box.y + (a.y - box.y) * sy;
+  1364→            const P = parentWorldMatrix(draft, draft.nodesById[n.id]);
+  1365→            const local = mApply(mInvert(P), nx, ny);
+  1366→            const fresh: Partial<IrisNode> = { x: local.x, y: local.y, w: Math.max(1, n.w * sx), h: Math.max(n.type === 'line' || n.type === 'arrow' ? 0 : 1, n.h * sy) };
+  1367→            if (n.type === 'text') {
+  1368→              fresh.fontSize = Math.max(1, n.fontSize * ((sx + sy) / 2));
+  1369→            }
+  1370→            if (n.cornerRadius) fresh.cornerRadius = Math.max(0, n.cornerRadius * ((sx + sy) / 2));
+  1371→            putNode(draft, n.id, fresh);
+  1372→            if (isContainer(n)) scaleSubtree(draft, n.id, sx, sy, true);
+  1373→          }
+  1374→        },
+  1375→        { history: 'resize' },
+  1376→      );
+  1377→    },
+  1378→
+  1379→    moveSelectionWorld: (dx, dy, label) => {
+  1380→      if (dx === 0 && dy === 0) return;
+  1381→      const state = get();
+  1382→      const doc = state.doc;
+  1383→      const targets = state.selection.map((id) => doc.nodesById[id]).filter(Boolean) as IrisNode[];
+  1384→      commit(
+  1385→        (draft) => {
+  1386→          for (const n of targets) {
+  1387→            const P = parentWorldMatrix(draft, draft.nodesById[n.id]);
+  1388→            const local = mApplyVec(mInvert(P), dx, dy);
+  1389→            putNode(draft, n.id, { x: n.x + local.x, y: n.y + local.y });
+  1390→          }
+  1391→        },
+  1392→        { history: label ?? 'move' },
+  1393→      );
+  1394→    },
+  1395→
+  1396→    renameNode: (id, name) => {
+  1397→      const trimmed = name.trim();
+  1398→      if (!trimmed) return;
+  1399→      commit((draft) => putNode(draft, id, { name: trimmed }), { history: 'rename' });
+  1400→    },
+  1401→
+  1402→    /* -------------------------- transforms ------------------------- */
+  1403→    flipSelection: (axis) => {
+  1404→      const state = get();
+  1405→      if (state.selection.length === 0) return;
+  1406→      const key = axis === 'h' ? 'flipH' : 'flipV';
+  1407→      commit(
+  1408→        (draft) => {
+  1409→          for (const id of state.selection) {
+  1410→            const n = draft.nodesById[id];
+  1411→            if (!n) continue;
+  1412→            putNode(draft, id, { [key]: !n[key] } as Partial<IrisNode>);
+  1413→          }
+  1414→        },
+  1415→        { history: 'flip' },
+  1416→      );
+  1417→      get().toast(axis === 'h' ? 'Flipped horizontally' : 'Flipped vertically');
+  1418→    },
+  1419→
+  1420→    rotateSelectionBy: (deg) => {
+  1421→      const state = get();
+  1422→      const ids = state.selection;
+  1423→      if (ids.length === 0) return;
+  1424→      const box = boundsOfNodes(state.doc, ids);
+  1425→      if (!box) return;
+  1426→      const center = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
+  1427→      const R = mMul(mMul(mTranslate(center.x, center.y), mRotate(deg)), mTranslate(-center.x, -center.y));
+  1428→      const worlds = new Map<ID, Mat>();
+  1429→      ids.forEach((id) => {
+  1430→        const n = state.doc.nodesById[id];
+  1431→        if (n) worlds.set(id, nodeWorldMatrix(state.doc, n));
+  1432→      });
+  1433→      commit(
+  1434→        (draft) => {
+  1435→          for (const id of ids) {
+  1436→            const W = worlds.get(id);
+  1437→            const n = draft.nodesById[id];
+  1438→            if (!W || !n) continue;
+  1439→            const updated = { ...n };
+  1440→            applyLocalMatrix(updated, mMul(R, W));
+  1441→            draft.nodesById[id] = updated;
+  1442→          }
+  1443→        },
+  1444→        { history: 'rotate90' },
+  1445→      );
+  1446→    },
+  1447→
+  1448→    toggleLockSelection: () => {
+  1449→      const state = get();
+  1450→      if (state.selection.length === 0) return;
+  1451→      const lock = state.selection.some((id) => !state.doc.nodesById[id]?.locked);
+  1452→      commit(
+  1453→        (draft) => {
+  1454→          for (const id of state.selection) putNode(draft, id, { locked: lock });
+  1455→        },
+  1456→        { history: 'lock' },
+  1457→      );
+  1458→      get().toast(lock ? 'Locked selection' : 'Unlocked selection');
+  1459→    },
+  1460→
+  1461→    unlockAllOnPage: () => {
+  1462→      const state = get();
+  1463→      const page = state.doc.pagesById[state.currentPageId];
+  1464→      if (!page) return;
+  1465→      const locked: ID[] = [];
+  1466→      const visit = (nid: ID): void => {
+  1467→        const n = state.doc.nodesById[nid];
+  1468→        if (!n) return;
+  1469→        if (n.locked) locked.push(nid);
+  1470→        n.children.forEach(visit);
+  1471→      };
+  1472→      page.nodeIds.forEach(visit);
+  1473→      if (locked.length === 0) {
+  1474→        get().toast('Nothing is locked on this page');
+  1475→        return;
+  1476→      }
+  1477→      commit(
+  1478→        (draft) => {
+  1479→          for (const id of locked) putNode(draft, id, { locked: false });
+  1480→        },
+  1481→        { history: 'unlockAll' },
+  1482→      );
+  1483→      get().toast(`Unlocked ${locked.length} object${locked.length === 1 ? '' : 's'}`);
+  1484→    },
+  1485→
+  1486→    toggleHideSelection: () => {
+  1487→      const state = get();
+  1488→      if (state.selection.length === 0) return;
+  1489→      const hide = state.selection.some((id) => state.doc.nodesById[id]?.visible);
+  1490→      commit(
+  1491→        (draft) => {
+  1492→          for (const id of state.selection) putNode(draft, id, { visible: hide });
+  1493→        },
+  1494→        { history: 'visible', selection: hide ? [] : state.selection },
+  1495→      );
+  1496→      get().toast(hide ? 'Hidden selection' : 'Shown selection');
+  1497→    },
+  1498→
+  1499→    /* ---------------------------- style ---------------------------- */
+  1500→    copyStyle: () => {
+  1501→      const state = get();
+  1502→      if (state.selection.length === 0) return;
+  1503→      const n = state.doc.nodesById[state.selection[0]];
+  1504→      if (!n) return;
+  1505→      const style: Partial<IrisNode> = {};
+  1506→      for (const key of STYLE_FIELDS) {
+  1507→        const v = n[key];
+  1508→        if (v === null || v === undefined) continue;
+  1509→        if (typeof v === 'object') (style as Record<string, unknown>)[key] = { ...(v as object) };
+  1510→        else (style as Record<string, unknown>)[key] = v;
+  1511→      }
+  1512→      set({ styleClipboard: style });
+  1513→      get().toast(`Copied style of ${n.name}`);
+  1514→    },
+  1515→
+  1516→    pasteStyle: () => {
+  1517→      const state = get();
+  1518→      const style = state.styleClipboard;
+  1519→      if (!style) {
+  1520→        get().toast('No style copied yet');
+  1521→        return;
+  1522→      }
+  1523→      if (state.selection.length === 0) return;
+  1524→      commit(
+  1525→        (draft) => {
+  1526→          for (const id of state.selection) {
+  1527→            const n = draft.nodesById[id];
+  1528→            if (!n) continue;
+  1529→            const patch: Partial<IrisNode> = {};
+  1530→            for (const [k, v] of Object.entries(style)) {
+  1531→              if (k === 'fontFamily' && n.type !== 'text') continue;
+  1532→              if (['fontSize', 'fontWeight', 'textAlign', 'lineHeight', 'letterSpacing', 'textCase', 'underline', 'strike'].includes(k) && n.type !== 'text') continue;
+  1533→              (patch as Record<string, unknown>)[k] = typeof v === 'object' && v !== null ? { ...(v as object) } : v;
+  1534→            }
+  1535→            putNode(draft, id, patch);
+  1536→          }
+  1537→        },
+  1538→        { history: 'pasteStyle' },
+  1539→      );
+  1540→      get().toast(`Pasted style onto ${state.selection.length} object${state.selection.length === 1 ? '' : 's'}`);
+  1541→    },
+  1542→
+  1543→    /* ------------------------- doc settings ------------------------ */
+  1544→    setSettings: (patch) => {
+  1545→      commit(
+  1546→        (draft) => {
+  1547→          draft.settings = {
+  1548→            ...draft.settings,
+  1549→            ...patch,
+  1550→            grid: { ...draft.settings.grid, ...(patch.grid ?? {}) },
+  1551→            guidesX: patch.guidesX ?? [...draft.settings.guidesX],
+  1552→            guidesY: patch.guidesY ?? [...draft.settings.guidesY],
+  1553→          };
+  1554→        },
+  1555→        { history: 'settings' },
+  1556→      );
+  1557→    },
+  1558→    setGridSettings: (patch) => {
+  1559→      commit(
+  1560→        (draft) => {
+  1561→          draft.settings = { ...draft.settings, grid: { ...draft.settings.grid, ...patch } };
+  1562→        },
+  1563→        { history: 'settings' },
+  1564→      );
+  1565→    },
+  1566→    addGuide: (axis, at) => {
+  1567→      commit(
+  1568→        (draft) => {
+  1569→          if (axis === 'x') draft.settings.guidesX = [...draft.settings.guidesX, Math.round(at)];
+  1570→          else draft.settings.guidesY = [...draft.settings.guidesY, Math.round(at)];
+  1571→        },
+  1572→        { history: 'guide' },
+  1573→      );
+  1574→    },
+  1575→    moveGuide: (axis, index, at) => {
+  1576→      commit(
+  1577→        (draft) => {
+  1578→          if (axis === 'x') {
+  1579→            const list = [...draft.settings.guidesX];
+  1580→            if (index < 0 || index >= list.length) return;
+  1581→            list[index] = Math.round(at);
+  1582→            draft.settings.guidesX = list;
+  1583→          } else {
+  1584→            const list = [...draft.settings.guidesY];
+  1585→            if (index < 0 || index >= list.length) return;
+  1586→            list[index] = Math.round(at);
+  1587→            draft.settings.guidesY = list;
+  1588→          }
+  1589→        },
+  1590→        { history: false },
+  1591→      );
+  1592→    },
+  1593→    removeGuide: (axis, index) => {
+  1594→      commit(
+  1595→        (draft) => {
+  1596→          if (axis === 'x') draft.settings.guidesX = draft.settings.guidesX.filter((_, i) => i !== index);
+  1597→          else draft.settings.guidesY = draft.settings.guidesY.filter((_, i) => i !== index);
+  1598→        },
+  1599→        { history: 'guide' },
+  1600→      );
+  1601→    },
+  1602→    clearGuides: () => {
+  1603→      const s = get();
+  1604→      if (!s.doc.settings.guidesX.length && !s.doc.settings.guidesY.length) return;
+  1605→      commit(
+  1606→        (draft) => {
+  1607→          draft.settings.guidesX = [];
+  1608→          draft.settings.guidesY = [];
+  1609→        },
+  1610→        { history: 'guide' },
+  1611→      );
+  1612→      get().toast('Cleared all guides');
+  1613→    },
+  1614→
+  1615→    /* --------------------------- editing --------------------------- */
+  1616→    setEditingText: (id) => {
+  1617→      if (id) get().setSelection([id]);
+  1618→      set({ editingTextId: id, editingPathId: null });
+  1619→    },
+  1620→    setEditingPath: (id) => {
+  1621→      if (id) get().setSelection([id]);
+  1622→      set({ editingPathId: id, editingTextId: null });
+  1623→    },
+  1624→
+  1625→    /* --------------------------- images ---------------------------- */
+  1626→    importImage: (src, w, h, at, parentId) => {
+  1627→      const state = get();
+  1628→      const scale = Math.min(1, 800 / Math.max(w, h, 1));
+  1629→      const nw = Math.max(1, Math.round(w * scale));
+  1630→      const nh = Math.max(1, Math.round(h * scale));
+  1631→      const center = at ?? viewportCenter();
+  1632→      let x = center.x - nw / 2;
+  1633→      let y = center.y - nh / 2;
+  1634→      // when parenting into a frame, convert to parent-local coords
+  1635→      if (parentId) {
+  1636→        const parent = state.doc.nodesById[parentId];
+  1637→        if (parent) {
+  1638→          const inv = mInvert(nodeWorldMatrix(state.doc, parent));
+  1639→          const local = mApply(inv, x, y);
+  1640→          x = local.x;
+  1641→          y = local.y;
+  1642→        }
+  1643→      }
+  1644→      return get().addNode(
+  1645→        'image',
+  1646→        {
+  1647→          src,
+  1648→          w: nw,
+  1649→          h: nh,
+  1650→          x,
+  1651→          y,
+  1652→        },
+  1653→        parentId ?? null,
+  1654→      );
+  1655→    },
+  1656→
+  1657→    /* ---------------------------- files ---------------------------- */
+  1658→    flushSave: () => {
+  1659→      if (autosaveTimer) {
+  1660→        clearTimeout(autosaveTimer);
+  1661→        autosaveTimer = null;
+  1662→      }
+  1663→      saveAutosave(get());
+  1664→    },
+  1665→
+  1666→    newDoc: () => {
+  1667→      get().flushSave();
+  1668→      const { id, doc } = createLibraryDoc();
+  1669→      set({
+  1670→        doc,
+  1671→        docId: id,
+  1672→        route: { kind: 'doc', id },
+  1673→        currentPageId: doc.pages[0],
+  1674→        selection: [],
+  1675→        past: [],
+  1676→        future: [],
+  1677→        clipboard: null,
+  1678→        editingTextId: null,
+  1679→        editingPathId: null,
+  1680→        savedName: null,
+  1681→        dirty: false,
+  1682→        viewport: DEFAULT_VIEWPORT,
+  1683→      });
+  1684→      pushRoute({ kind: 'doc', id });
+  1685→      get().toast('New document created');
+  1686→    },
+  1687→
+  1688→    newDocFromTemplate: (templateId) => {
+  1689→      get().flushSave();
+  1690→      const doc = buildTemplate(templateId);
+  1691→      const entry = importDocIntoLibrary(doc);
+  1692→      set({
+  1693→        doc,
+  1694→        docId: entry.id,
+  1695→        route: { kind: 'doc', id: entry.id },
+  1696→        currentPageId: doc.pages[0],
+  1697→        selection: [],
+  1698→        past: [],
+  1699→        future: [],
+  1700→        clipboard: null,
+  1701→        editingTextId: null,
+  1702→        editingPathId: null,
+  1703→        savedName: null,
+  1704→        dirty: false,
+  1705→        viewport: { x: 60, y: 60, zoom: 0.75 },
+  1706→      });
+  1707→      pushRoute({ kind: 'doc', id: entry.id });
+  1708→      get().toast(`Created “${doc.name}”`);
+  1709→    },
+  1710→
+  1711→    /**
+  1712→     * Open an external document (.iris file / recent) — registers it as a new
+  1713→     * library entry so it shows up on the homepage and can be reopened later.
+  1714→     */
+  1715→    loadDoc: (rawDoc, savedName, fitView) => {
+  1716→      get().flushSave();
+  1717→      const doc = normalizeDoc(rawDoc);
+  1718→      if (savedName) doc.name = savedName;
+  1719→      const entry = importDocIntoLibrary(doc);
+  1720→      set({
+  1721→        doc,
+  1722→        docId: entry.id,
+  1723→        route: { kind: 'doc', id: entry.id },
+  1724→        currentPageId: doc.pages[0],
+  1725→        selection: [],
+  1726→        past: [],
+  1727→        future: [],
+  1728→        clipboard: null,
+  1729→        editingTextId: null,
+  1730→        editingPathId: null,
+  1731→        savedName: savedName ?? null,
+  1732→        dirty: false,
+  1733→        viewport: DEFAULT_VIEWPORT,
+  1734→      });
+  1735→      pushRoute({ kind: 'doc', id: entry.id });
+  1736→      if (fitView) get().zoomToFit();
+  1737→    },
+  1738→
+  1739→    /** Open a document from the library (homepage card click). */
+  1740→    openDoc: (id, opts) => {
+  1741→      const s = get();
+  1742→      if (s.route.kind === 'doc' && s.route.id === id) return;
+  1743→      s.flushSave();
+  1744→      const stored = getStoredDoc(id);
+  1745→      if (!stored) {
+  1746→        get().toast('That file could not be opened');
+  1747→        return;
+  1748→      }
+  1749→      const doc = stored.doc;
+  1750→      const pageId =
+  1751→        stored.currentPageId && doc.pages.includes(stored.currentPageId) ? stored.currentPageId : doc.pages[0];
+  1752→      set({
+  1753→        doc,
+  1754→        docId: id,
+  1755→        route: { kind: 'doc', id },
+  1756→        currentPageId: pageId,
+  1757→        selection: [],
+  1758→        past: [],
+  1759→        future: [],
+  1760→        clipboard: null,
+  1761→        editingTextId: null,
+  1762→        editingPathId: null,
+  1763→        savedName: null,
+  1764→        dirty: false,
+  1765→        viewport: stored.viewport ?? DEFAULT_VIEWPORT,
+  1766→      });
+  1767→      if (opts?.push !== false) pushRoute({ kind: 'doc', id });
+  1768→    },
+  1769→
+  1770→    /** Leave the editor and return to the file browser (homepage). */
+  1771→    goHome: (opts) => {
+  1772→      get().flushSave();
+  1773→      set({
+  1774→        route: { kind: 'home' },
+  1775→        docId: null,
+  1776→        selection: [],
+  1777→        editingTextId: null,
+  1778→        editingPathId: null,
+  1779→        contextMenu: null,
+  1780→      });
+  1781→      if (opts?.push !== false) pushRoute({ kind: 'home' });
+  1782→    },
+  1783→
+  1784→    /** Browser Back/Forward: adopt the URL route without pushing history. */
+  1785→    syncRoute: () => {
+  1786→      const r = routeFromLocation();
+  1787→      const s = get();
+  1788→      if (r.kind === 'doc') {
+  1789→        if (s.route.kind === 'doc' && s.route.id === r.id) return;
+  1790→        if (!getStoredDoc(r.id)) {
+  1791→          replaceRoute({ kind: 'home' });
+  1792→          if (s.route.kind !== 'home') get().goHome({ push: false });
+  1793→          get().toast('That file is no longer available');
+  1794→          return;
+  1795→        }
+  1796→        get().openDoc(r.id, { push: false });
+  1797→        return;
+  1798→      }
+  1799→      if (s.route.kind === 'home') return;
+  1800→      get().goHome({ push: false });
+  1801→    },
+  1802→
+  1803→    markSaved: (name) => set({ savedName: name, dirty: false }),
+  1804→
+  1805→    /* ------------------------------ ui ----------------------------- */
+  1806→    toast: (msg, action) => {
+  1807→      const id = toastSeq++;
+  1808→      set((s) => ({ toasts: [...s.toasts.slice(-3), { id, msg, action }] }));
+  1809→      setTimeout(() => get().dismissToast(id), action ? 5000 : 2400);
+  1810→    },
+  1811→    dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  1812→    openContextMenu: (x, y, worldX, worldY) => set({ contextMenu: { x, y, worldX, worldY } }),
+  1813→    closeContextMenu: () => set({ contextMenu: null }),
+  1814→    setExportOpen: (open) => set({ exportOpen: open }),
+  1815→    setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
+  1816→  };
+  1817→});
+  1818→
+  1819→/* ------------------------------------------------------------------ */
+  1820→/* Convenience hooks                                                   */
+  1821→/* ------------------------------------------------------------------ */
+  1822→
+  1823→export function useSelectedNodes(): IrisNode[] {
+  1824→  return useIris(
+  1825→    useShallow((s) => s.selection.map((id) => s.doc.nodesById[id]).filter(Boolean) as IrisNode[]),
+  1826→  );
+  1827→}
+  1828→
+  1829→export function useCanvasPage() {
+  1830→  return useIris((s) => s.doc.pagesById[s.currentPageId] ?? null);
+  1831→}
+  1832→

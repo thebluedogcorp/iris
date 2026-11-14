@@ -39,8 +39,8 @@ import { overlay } from './overlay';
 import { useIris } from './store';
 import { getImage, onImageCacheChange } from './imageCache';
 
-export const ACCENT = '#8B5CF6';
-export const ACCENT_LIGHT = '#C4B5FD';
+export const ACCENT = '#0D99FF';
+export const ACCENT_LIGHT = '#7EC9FF';
 const SNAP = '#FF3B30';
 const DEFAULT_CANVAS_BG = '#242424';
 const RULER_BG = '#1E1E1E';
@@ -53,6 +53,12 @@ let ctx: CanvasRenderingContext2D | null = null;
 let raf = 0;
 /** set during the scene pass: render shapes as outlines (wireframe view) */
 let outlineMode = false;
+/** set during export passes: skip editor-only visuals (slices) */
+let exportPass = false;
+
+export function setExportPass(v: boolean): void {
+  exportPass = v;
+}
 
 export function requestDraw(): void {
   if (raf) return;
@@ -290,6 +296,53 @@ function drawNode(
       c.stroke();
       if (dash.length) c.setLineDash([]);
     }
+    c.restore();
+    return;
+  }
+
+  if (n.type === 'section') {
+    // section: translucent backdrop + border + big label (children render on top
+    // of the backdrop — sections never clip and never own children at draw time)
+    roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
+    if (!outlineMode) {
+      applyShadow();
+      c.fillStyle = paintOf(c, n) ?? 'rgba(136,136,136,0.10)';
+      c.fill();
+      clearShadow();
+    }
+    if (n.stroke && n.strokeWidth > 0) {
+      roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
+      c.strokeStyle = n.stroke;
+      c.lineWidth = n.strokeWidth;
+      const dash = dashArray(n.dash, n.strokeWidth);
+      if (dash.length) c.setLineDash(dash);
+      c.stroke();
+      if (dash.length) c.setLineDash([]);
+    }
+    c.restore();
+    return;
+  }
+
+  if (n.type === 'slice') {
+    // slice: dashed editor-only marker with a diagonal cross (skipped on export)
+    if (exportPass) {
+      c.restore();
+      return;
+    }
+    c.strokeStyle = n.stroke ?? '#F24822';
+    c.lineWidth = 1;
+    const dash = dashArray('dashed', 1);
+    c.setLineDash(dash);
+    c.strokeRect(0, 0, n.w, n.h);
+    c.setLineDash([]);
+    c.globalAlpha = ga * 0.5;
+    c.beginPath();
+    c.moveTo(0, 0);
+    c.lineTo(n.w, n.h);
+    c.moveTo(n.w, 0);
+    c.lineTo(0, n.h);
+    c.stroke();
+    c.globalAlpha = ga;
     c.restore();
     return;
   }
@@ -569,7 +622,7 @@ function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.g
     c.font = '12px Inter, system-ui, sans-serif';
     c.fillStyle = '#4E4E4E';
     c.fillText(
-      'Press F for a frame · R rectangle · O ellipse · Y polygon · S star · T text · P pen',
+      'Press F for a frame · R rectangle · O ellipse · T text · P pen · Shift+P pencil · C comment',
       W / 2,
       H / 2 + 8,
     );
@@ -635,7 +688,12 @@ function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.g
   }
 
   // selection handles
-  if (s.selection.length > 0 && s.tool === 'move' && !s.editingTextId && !s.editingPathId) {
+  if (
+    s.selection.length > 0 &&
+    (s.tool === 'move' || s.tool === 'scale') &&
+    !s.editingTextId &&
+    !s.editingPathId
+  ) {
     const geo = selectionHandleGeometry(doc, s.selection, vp);
     if (geo) {
       // box
@@ -649,7 +707,8 @@ function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.g
       } else {
         c.strokeRect(geo.rect.x, geo.rect.y, geo.rect.w, geo.rect.h);
       }
-      // rotation handle
+      // rotation handle (move tool only)
+      if (s.tool === 'move') {
       const topMid = geo.pts.find((p) => p.kind === 'n')!;
       c.beginPath();
       c.moveTo(topMid.x, topMid.y);
@@ -661,8 +720,10 @@ function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.g
       c.fill();
       c.strokeStyle = ACCENT;
       c.stroke();
-      // handles
+      }
+      // handles (scale tool: corners only)
       for (const p of geo.pts) {
+        if (s.tool === 'scale' && !(p.kind === 'nw' || p.kind === 'ne' || p.kind === 'sw' || p.kind === 'se')) continue;
         c.fillStyle = '#FFFFFF';
         c.strokeStyle = ACCENT;
         c.lineWidth = 1;
@@ -784,10 +845,22 @@ function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.g
       c.beginPath();
       c.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
       c.stroke();
-    } else if (dp.type === 'frame') {
+    } else if (dp.type === 'frame' || dp.type === 'section') {
       c.fillStyle = 'rgba(255,255,255,0.08)';
       c.fillRect(x, y, w, h);
       c.strokeRect(x, y, w, h);
+    } else if (dp.type === 'slice') {
+      c.setLineDash([5, 4]);
+      c.strokeRect(x, y, w, h);
+      c.setLineDash([]);
+      c.globalAlpha *= 0.5;
+      c.beginPath();
+      c.moveTo(x, y);
+      c.lineTo(x + w, y + h);
+      c.moveTo(x + w, y);
+      c.lineTo(x, y + h);
+      c.stroke();
+      c.globalAlpha /= 0.5;
     } else if (dp.type === 'text') {
       c.setLineDash([4, 3]);
       c.strokeRect(x, y, Math.max(w, 2), Math.max(h, 16));
@@ -902,6 +975,22 @@ function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.g
       c.fill();
       c.stroke();
     });
+  }
+
+  // pencil (freehand) draft stroke
+  if (overlay.pencilDraft && overlay.pencilDraft.length > 1) {
+    const pts = overlay.pencilDraft;
+    c.save();
+    c.translate(vp.x, vp.y);
+    c.scale(vp.zoom, vp.zoom);
+    c.strokeStyle = ACCENT;
+    c.lineWidth = 1.5 / vp.zoom;
+    c.lineJoin = 'round';
+    c.lineCap = 'round';
+    c.beginPath();
+    pts.forEach((p, i) => (i === 0 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y)));
+    c.stroke();
+    c.restore();
   }
 }
 
@@ -1065,17 +1154,25 @@ function drawFrameLabels(
   const vp = s.viewport;
   const page = s.doc.pagesById[s.currentPageId];
   if (!page) return;
-  c.font = '11px Inter, system-ui, sans-serif';
   c.textAlign = 'left';
   for (const id of page.nodeIds) {
     const n = s.doc.nodesById[id];
-    if (!n || n.type !== 'frame' || !n.visible) continue;
+    if (!n || !n.visible) continue;
     const box = nodeWorldAABB(s.doc, n);
     const x = box.x * vp.zoom + vp.x + ox;
     const y = box.y * vp.zoom + vp.y + oy;
     if (x > W || y > H || x + box.w * vp.zoom < 0) continue;
-    if (y < RULER + 14) continue;
-    c.fillStyle = s.selection.includes(id) ? ACCENT_LIGHT : '#8A8A8A';
-    c.fillText(n.name, x, y - 6);
+    if (n.type === 'frame') {
+      if (y < RULER + 14) continue;
+      c.font = '11px Inter, system-ui, sans-serif';
+      c.fillStyle = s.selection.includes(id) ? ACCENT_LIGHT : '#8A8A8A';
+      c.fillText(n.name, x, y - 6);
+    } else if (n.type === 'section') {
+      // big section label, inside the top-left corner
+      const fs = Math.max(12, Math.min(18, 14 * vp.zoom));
+      c.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+      c.fillStyle = s.selection.includes(id) ? ACCENT_LIGHT : 'rgba(214,214,214,0.85)';
+      c.fillText(n.name, x + 16 * vp.zoom, y + 26 * vp.zoom);
+    }
   }
 }

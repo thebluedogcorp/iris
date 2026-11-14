@@ -7,9 +7,13 @@
  * clip, document settings and quick export.
  */
 
-import { useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
+  ChevronDown,
+  Code2,
+  Play,
+  Share2,
   AlignCenterHorizontal,
   AlignCenterVertical,
   AlignEndHorizontal,
@@ -39,8 +43,8 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { useIris, useSelectedNodes, type AlignMode } from '../engine/store';
 import { boundsOfNodes } from '../engine/geometry';
-import { BLEND_MODES, type ArrowHead, type DashStyle, type TextCase } from '../engine/model';
-import { exportPNG, exportSVG } from '../engine/export';
+import { BLEND_MODES, FRAME_PRESETS, type ArrowHead, type DashStyle, type TextCase } from '../engine/model';
+import { exportPNG, exportSVG, svgStringOfSelection } from '../engine/export';
 import { cn } from '@/lib/utils';
 import { NumberField } from './NumberField';
 import { ColorField } from './ColorField';
@@ -148,7 +152,7 @@ function IconBtn({
   );
 }
 
-export function PropertiesPanel() {
+function DesignTab() {
   const doc = useIris((s) => s.doc);
   const currentPageId = useIris((s) => s.currentPageId);
   const selection = useIris((s) => s.selection);
@@ -197,11 +201,7 @@ export function PropertiesPanel() {
   /* ---------------- empty state ---------------- */
   if (nodes.length === 0) {
     return (
-      <aside className="flex h-full w-48 flex-col border-l border-[#3E3E3E] bg-[#2C2C2C] sm:w-52 lg:w-60">
-        <div className="flex h-9 shrink-0 items-center px-3">
-          <span className="iris-section-title text-[11px]">Design</span>
-        </div>
-        <div className="iris-scroll flex-1 overflow-y-auto">
+      <div className="iris-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
           <Section title="Page">
             {page ? (
               <input
@@ -241,7 +241,7 @@ export function PropertiesPanel() {
                 <Switch
                   checked={settings.grid.show}
                   aria-label="Show layout grid"
-                  className="data-[state=checked]:bg-[#8B5CF6] data-[state=unchecked]:bg-[#383838]"
+                  className="data-[state=checked]:bg-[#0D99FF] data-[state=unchecked]:bg-[#383838]"
                   onCheckedChange={(v) => actions.setGridSettings({ show: v })}
                 />
               </div>
@@ -263,7 +263,7 @@ export function PropertiesPanel() {
                     <Switch
                       checked={settings.grid.snap}
                       aria-label="Snap to grid"
-                      className="data-[state=checked]:bg-[#8B5CF6] data-[state=unchecked]:bg-[#383838]"
+                      className="data-[state=checked]:bg-[#0D99FF] data-[state=unchecked]:bg-[#383838]"
                       onCheckedChange={(v) => actions.setGridSettings({ snap: v })}
                     />
                   </div>
@@ -284,28 +284,28 @@ export function PropertiesPanel() {
 
           <Section title="Quick tips">
             <ul className="space-y-1.5 text-[11px] leading-4 text-[#9A9A9A]">
-              <li>V Move · F Frame · R Rect · O Ellipse</li>
-              <li>Y Polygon · S Star · A Arrow · P Pen</li>
-              <li>T Text · I Eyedropper · M Image</li>
+              <li>V Move · K Scale · F Frame · Shift+S Section</li>
+              <li>R Rect · O Ellipse · L Line · Shift+L Arrow</li>
+              <li>P Pen · Shift+P Pencil · T Text · C Comment</li>
+              <li>Ctrl+Enter to present · Shift+R rulers</li>
               <li>Space + drag to pan · Ctrl + wheel to zoom</li>
               <li>Drag from a ruler to create a guide</li>
-              <li>Shift+H / Shift+V flip · Shift drag to constrain</li>
+              <li>Layers list the topmost layer first</li>
               <li>Everything is saved locally, automatically</li>
             </ul>
           </Section>
-        </div>
-      </aside>
+      </div>
     );
   }
 
   /* ---------------- selection state ---------------- */
   return (
-    <aside className="flex h-full w-48 flex-col border-l border-[#3E3E3E] bg-[#2C2C2C] sm:w-52 lg:w-60">
-      <div className="flex h-9 shrink-0 items-center px-3">
-        <span className="iris-section-title text-[11px]">
+    <div className="iris-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex h-9 shrink-0 items-center gap-1 px-3">
+        <span className="iris-section-title truncate text-[11px]">
           {single ? single.name : `${nodes.length} selected`}
         </span>
-        <div className="ml-auto flex items-center gap-0.5">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
           <IconBtn
             label={single?.locked ? 'Unlock' : 'Lock'}
             Icon={single?.locked ? Unlock : Lock}
@@ -543,13 +543,13 @@ export function PropertiesPanel() {
                 <Switch
                   checked={!!single.fillGradient}
                   aria-label="Gradient fill"
-                  className="data-[state=checked]:bg-[#8B5CF6] data-[state=unchecked]:bg-[#383838]"
+                  className="data-[state=checked]:bg-[#0D99FF] data-[state=unchecked]:bg-[#383838]"
                   onCheckedChange={(on) =>
                     actions.updateNodes(
                       [single.id],
                       {
                         fillGradient: on
-                          ? single.fillGradient ?? { type: 'linear', angle: 90, from: single.fill ?? '#8B5CF6', to: '#C4B5FD' }
+                          ? single.fillGradient ?? { type: 'linear', angle: 90, from: single.fill ?? '#0D99FF', to: '#7EC9FF' }
                           : null,
                       },
                       { history: 'gradient' },
@@ -601,7 +601,7 @@ export function PropertiesPanel() {
                         onChange={(v) =>
                           actions.updateNodes(
                             [single.id],
-                            { fillGradient: { ...single.fillGradient!, from: v ?? '#8B5CF6' } },
+                            { fillGradient: { ...single.fillGradient!, from: v ?? '#0D99FF' } },
                             { history: 'gradient' },
                           )
                         }
@@ -615,7 +615,7 @@ export function PropertiesPanel() {
                         onChange={(v) =>
                           actions.updateNodes(
                             [single.id],
-                            { fillGradient: { ...single.fillGradient!, to: v ?? '#C4B5FD' } },
+                            { fillGradient: { ...single.fillGradient!, to: v ?? '#7EC9FF' } },
                             { history: 'gradient' },
                           )
                         }
@@ -679,7 +679,7 @@ export function PropertiesPanel() {
                   <Switch
                     checked={!!single.shadow}
                     aria-label="Drop shadow"
-                    className="data-[state=checked]:bg-[#8B5CF6] data-[state=unchecked]:bg-[#383838]"
+                    className="data-[state=checked]:bg-[#0D99FF] data-[state=unchecked]:bg-[#383838]"
                     onCheckedChange={(on) =>
                       actions.updateNodes(
                         [single.id],
@@ -1029,7 +1029,7 @@ export function PropertiesPanel() {
               <Switch
                 checked={single.clip}
                 aria-label="Clip content"
-                className="data-[state=checked]:bg-[#8B5CF6] data-[state=unchecked]:bg-[#383838]"
+                className="data-[state=checked]:bg-[#0D99FF] data-[state=unchecked]:bg-[#383838]"
                 onCheckedChange={(v) => actions.updateNodes([single.id], { clip: v }, { history: 'clip' })}
               />
             </div>
@@ -1064,6 +1064,395 @@ export function PropertiesPanel() {
           <p className="mt-1.5 text-[10px] text-[#6F6F6F]">Exports the current selection</p>
         </Section>
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Panel chrome (Figma UI3 header: avatar · present · Share, tabs,     */
+/* zoom dropdown) + frame presets + inspect + prototype views          */
+/* ------------------------------------------------------------------ */
+
+const ZOOM_PRESETS: { label: string; value: number | 'fit' | 'sel' }[] = [
+  { label: '25%', value: 0.25 },
+  { label: '50%', value: 0.5 },
+  { label: '100%', value: 1 },
+  { label: '200%', value: 2 },
+  { label: '400%', value: 4 },
+  { label: 'Zoom to fit', value: 'fit' },
+  { label: 'Zoom to selection', value: 'sel' },
+];
+
+function ZoomDropdown() {
+  const zoom = useIris((s) => s.viewport.zoom);
+  const setZoom = useIris((s) => s.setZoom);
+  const zoomToFit = useIris((s) => s.zoomToFit);
+  const zoomToSelection = useIris((s) => s.zoomToSelection);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent): void => {
+      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        className="flex h-7 items-center gap-1 rounded-md px-2 text-[11px] text-[#C9C9C9] transition-colors hover:bg-[#383838] hover:text-white"
+        aria-label="Zoom level — open presets"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Zoom"
+        onClick={() => setOpen((v) => !v)}
+      >
+        {Math.round(zoom * 100)}%
+        <ChevronDown size={11} strokeWidth={2} aria-hidden />
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          aria-label="Zoom presets"
+          className="absolute right-0 top-full z-50 mt-1 w-[170px] rounded-lg border border-[#4E4E4E] bg-[#1E1E1E] py-1 shadow-2xl"
+          style={{ animation: 'iris-menu-in-down 90ms ease-out' }}
+        >
+          {ZOOM_PRESETS.map((zp) => (
+            <button
+              key={zp.label}
+              type="button"
+              role="menuitem"
+              className="mx-1 flex h-8 w-[calc(100%-8px)] items-center rounded-md px-2 text-left text-[12px] text-[#E5E5E5] hover:bg-[#3A3A3A]"
+              onClick={() => {
+                setOpen(false);
+                if (zp.value === 'fit') zoomToFit();
+                else if (zp.value === 'sel') zoomToSelection();
+                else setZoom(zp.value);
+              }}
+            >
+              {zp.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AccountMenu() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const goHome = useIris((s) => s.goHome);
+  const toast = useIris((s) => s.toast);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent): void => {
+      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        className="flex h-7 items-center gap-1 rounded-full text-[11px] font-semibold text-white transition-transform hover:scale-[1.04]"
+        aria-label="Account menu"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Account"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0D99FF] text-[10px]">
+          TU
+        </span>
+        <ChevronDown size={11} strokeWidth={2} aria-hidden className="text-[#9A9A9A]" />
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          aria-label="Account"
+          className="absolute left-0 top-full z-50 mt-1 w-[220px] rounded-lg border border-[#4E4E4E] bg-[#1E1E1E] p-2 shadow-2xl"
+          style={{ animation: 'iris-menu-in-down 90ms ease-out' }}
+        >
+          <div className="flex items-center gap-2 px-1.5 py-1.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0D99FF] text-[11px] font-bold">
+              TU
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[12px] font-semibold text-white">Test User</span>
+              <span className="block truncate text-[10px] text-[#9A9A9A]">you@iris.studio</span>
+            </span>
+          </div>
+          <div className="my-1 h-px bg-[#3E3E3E]" />
+          <div className="px-1.5 py-1 text-[10px] text-[#6F6F6F]">
+            Free plan · local-first preview
+          </div>
+          <div className="my-1 h-px bg-[#3E3E3E]" />
+          <button
+            type="button"
+            role="menuitem"
+            className="mx-0.5 flex h-8 w-[calc(100%-4px)] items-center rounded-md px-2 text-left text-[12px] text-[#E5E5E5] hover:bg-[#3A3A3A]"
+            onClick={() => {
+              setOpen(false);
+              toast('Signed out (simulated) — see you soon');
+              goHome();
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Frame size presets shown while the Frame tool is active (Figma behavior). */
+function FramePresets() {
+  const tool = useIris((s) => s.tool);
+  const addFramePreset = useIris((s) => s.addFramePreset);
+  if (tool !== 'frame' && tool !== 'section') return null;
+
+  const groups = [...new Set(FRAME_PRESETS.map((p) => p.group))];
+  return (
+    <div>
+      {groups.map((g) => (
+        <Section key={g} title={g}>
+          <div className="flex flex-col gap-1">
+            {FRAME_PRESETS.filter((p) => p.group === g).map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="flex h-8 items-center justify-between rounded-md border border-[#3E3E3E] bg-[#1E1E1E] px-2.5 text-[11px] text-[#E5E5E5] transition-colors hover:border-[#0D99FF] hover:bg-[#252525]"
+                onClick={() => addFramePreset(p)}
+              >
+                <span>{p.name}</span>
+                <span className="text-[10px] text-[#6F6F6F]">
+                  {p.w} × {p.h}
+                </span>
+              </button>
+            ))}
+          </div>
+        </Section>
+      ))}
+      <Section>
+        <p className="text-[10px] leading-4 text-[#6F6F6F]">
+          Click a preset to drop it at the center of the view, or drag on the canvas for a custom size.
+        </p>
+      </Section>
+    </div>
+  );
+}
+
+/** Dev-mode inspect tab: SVG markup of the current selection. */
+function InspectTab() {
+  const selection = useIris((s) => s.selection);
+  const svg = useMemo(
+    () => (selection.length ? svgStringOfSelection() : null),
+    // recompute whenever the selection identity changes
+    [selection],
+  );
+
+  if (selection.length === 0) {
+    return (
+      <div className="p-4">
+        <p className="text-[11px] leading-5 text-[#9A9A9A]">
+          Inspect mode shows the SVG markup of your selection.
+          <br />
+          Select an object on the canvas to inspect its code.
+        </p>
+      </div>
+    );
+  }
+  if (!svg) {
+    return (
+      <div className="p-4">
+        <p className="text-[11px] text-[#9A9A9A]">This selection cannot be serialized to SVG.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center justify-between px-3 py-2">
+        <span className="text-[11px] font-semibold text-white">SVG</span>
+        <button
+          type="button"
+          className="rounded-md bg-[#0D99FF] px-2.5 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-[#0B87E0]"
+          onClick={() => {
+            void navigator.clipboard?.writeText(svg).then(
+              () => useIris.getState().toast('SVG markup copied'),
+              () => useIris.getState().toast('Could not copy'),
+            );
+          }}
+        >
+          Copy
+        </button>
+      </div>
+      <pre className="iris-scroll mx-3 mb-3 flex-1 overflow-auto rounded-lg border border-[#3E3E3E] bg-[#1E1E1E] p-3 font-mono text-[10px] leading-4 text-[#C9C9C9]">
+        {svg}
+      </pre>
+    </div>
+  );
+}
+
+/** Prototype tab: presentation controls. */
+function PrototypeTab() {
+  const doc = useIris((s) => s.doc);
+  const currentPageId = useIris((s) => s.currentPageId);
+  const setPresenting = useIris((s) => s.setPresenting);
+  const page = doc.pagesById[currentPageId];
+  const frames = (page?.nodeIds ?? [])
+    .map((id) => doc.nodesById[id])
+    .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'frame');
+
+  return (
+    <div className="iris-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <Section title="Prototype">
+        <button
+          type="button"
+          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#0D99FF] text-[12px] font-semibold text-white transition-colors hover:bg-[#0B87E0]"
+          onClick={() => setPresenting(true)}
+        >
+          <Play size={13} strokeWidth={2.2} aria-hidden />
+          Present {frames.length > 0 ? `(${frames.length} frame${frames.length === 1 ? '' : 's'})` : ''}
+        </button>
+        <p className="mt-2 text-[10px] leading-4 text-[#6F6F6F]">
+          Present your frames full-screen. Use ← → to move between frames, Esc to exit. Also
+          Ctrl+Enter anywhere.
+        </p>
+      </Section>
+      <Section title="Flow">
+        {frames.length === 0 ? (
+          <p className="text-[11px] leading-5 text-[#6F6F6F]">
+            No frames on this page yet. Press F and drag to create your first screen.
+          </p>
+        ) : (
+          <ol className="flex flex-col gap-1">
+            {frames.map((f, i) => (
+              <li
+                key={f.id}
+                className="flex h-8 items-center gap-2 rounded-md border border-[#3E3E3E] bg-[#1E1E1E] px-2.5 text-[11px] text-[#E5E5E5]"
+              >
+                <span className="flex h-5 w-5 items-center justify-center rounded bg-[#252525] text-[9px] text-[#9A9A9A]">
+                  {i + 1}
+                </span>
+                <span className="min-w-0 flex-1 truncate">{f.name}</span>
+                <span className="text-[10px] text-[#6F6F6F]">
+                  {Math.round(f.w)}×{Math.round(f.h)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+export function PropertiesPanel() {
+  const rightTab = useIris((s) => s.rightTab);
+  const setRightTab = useIris((s) => s.setRightTab);
+  const inspectMode = useIris((s) => s.inspectMode);
+  const setInspectMode = useIris((s) => s.setInspectMode);
+  const setShareOpen = useIris((s) => s.setShareOpen);
+  const setPresenting = useIris((s) => s.setPresenting);
+  const presenting = useIris((s) => s.presenting);
+  const tool = useIris((s) => s.tool);
+
+  if (presenting) return null;
+
+  return (
+    <aside className="flex h-full w-[240px] shrink-0 flex-col border-l border-[#2A2A2A] bg-[#2C2C2C] xl:w-[268px]">
+      {/* header: account · present · share */}
+      <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-[#2A2A2A] px-2.5">
+        <AccountMenu />
+        <button
+          type="button"
+          className="iris-icon-btn h-7! w-7!"
+          aria-label="Start presentation"
+          title="Present (Ctrl+Enter)"
+          onClick={() => setPresenting(true)}
+        >
+          <Play size={14} strokeWidth={2} aria-hidden />
+        </button>
+        <button
+          type="button"
+          className="ml-auto flex h-7 items-center gap-1.5 rounded-lg bg-[#0D99FF] px-3 text-[11px] font-semibold text-white transition-colors hover:bg-[#0B87E0]"
+          aria-label="Share"
+          onClick={() => setShareOpen(true)}
+        >
+          <Share2 size={12} strokeWidth={2.2} aria-hidden />
+          Share
+        </button>
+      </div>
+
+      {/* tabs + zoom */}
+      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-[#2A2A2A] px-2.5">
+        {(['design', 'prototype'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={rightTab === t}
+            className={`relative h-9 px-2 text-[11px] font-semibold capitalize transition-colors ${
+              rightTab === t ? 'text-white' : 'text-[#9A9A9A] hover:text-[#E5E5E5]'
+            }`}
+            onClick={() => setRightTab(t)}
+          >
+            {t}
+            {rightTab === t ? (
+              <span className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-[#0D99FF]" aria-hidden />
+            ) : null}
+          </button>
+        ))}
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            className="iris-icon-btn h-7! w-7!"
+            data-active={inspectMode}
+            aria-pressed={inspectMode}
+            aria-label="Inspect code"
+            title="Inspect code"
+            onClick={() => setInspectMode(!inspectMode)}
+          >
+            <Code2 size={14} strokeWidth={1.75} aria-hidden />
+          </button>
+          <ZoomDropdown />
+        </div>
+      </div>
+
+      {/* content */}
+      {inspectMode ? (
+        <InspectTab />
+      ) : rightTab === 'prototype' ? (
+        <PrototypeTab />
+      ) : tool === 'frame' || tool === 'section' ? (
+        <div className="iris-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <FramePresets />
+        </div>
+      ) : (
+        <DesignTab />
+      )}
     </aside>
   );
 }

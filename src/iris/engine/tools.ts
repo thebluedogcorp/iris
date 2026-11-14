@@ -64,6 +64,17 @@ type Interaction =
       moved: boolean;
     }
   | { kind: 'rotate'; center: Vec; startAngle: number; startNodes: IrisNode[]; worldMats: Map<ID, Mat>; parentInvs: Map<ID, Mat>; moved: boolean }
+  | {
+      kind: 'scale';
+      anchor: Vec;
+      startDist: number;
+      startNodes: IrisNode[];
+      startBox: Rect;
+      startCenters: Map<ID, Vec>;
+      parentInvs: Map<ID, Mat>;
+      moved: boolean;
+    }
+  | { kind: 'pencil'; points: Vec[]; parentId: ID | null }
   | { kind: 'draw'; type: NodeType; startWorld: Vec; parentId: ID | null }
   | { kind: 'penHandle' }
   | { kind: 'pathPoint'; index: number; ptsWorld: (PathPoint & { wx: number; wy: number })[]; moved: boolean }
@@ -128,9 +139,10 @@ function setCursor(css: string): void {
 function toolCursor(): string {
   const t = S().tool;
   if (overlay.spaceDown || t === 'hand') return 'grab';
-  if (t === 'move') return 'default';
+  if (t === 'move' || t === 'scale') return 'default';
   if (t === 'text') return 'text';
   if (t === 'eyedropper') return 'crosshair';
+  if (t === 'comment') return 'crosshair';
   return 'crosshair';
 }
 
@@ -184,7 +196,7 @@ function topOnly(ids: ID[]): ID[] {
   });
 }
 
-const DRAW_TOOLS: NodeType[] = ['frame', 'rect', 'ellipse', 'line', 'polygon', 'star', 'arrow'];
+const DRAW_TOOLS: NodeType[] = ['frame', 'rect', 'ellipse', 'line', 'polygon', 'star', 'arrow', 'section', 'slice'];
 
 /** Constrain a draw drag with Shift: squares for boxes, 45° for lines. */
 function constrainDraw(a: Vec, b: Vec, type: NodeType, shift: boolean): Vec {
@@ -288,6 +300,127 @@ function finishPen(closed: boolean): void {
   );
   s.setTool('move');
   requestDraw();
+}
+
+/* ------------------------------------------------------------------ */
+/* pencil (freehand)                                                   */
+/* ------------------------------------------------------------------ */
+
+function finishPencil(): void {
+  const ia = interaction as Extract<Interaction, { kind: 'pencil' }>;
+  const pts = ia.points;
+  overlay.pencilDraft = null;
+  interaction = { kind: 'none' };
+  if (pts.length < 2) {
+    requestDraw();
+    return;
+  }
+  // simplify: drop near-duplicate points (screen-space ~2px)
+  const zoom = S().viewport.zoom;
+  const simp: Vec[] = [pts[0]];
+  for (const p of pts.slice(1)) {
+    const last = simp[simp.length - 1];
+    if (Math.hypot(p.x - last.x, p.y - last.y) * zoom > 2) simp.push(p);
+  }
+  if (simp.length < 2) {
+    requestDraw();
+    return;
+  }
+  const minX = Math.min(...simp.map((p) => p.x));
+  const minY = Math.min(...simp.map((p) => p.y));
+  const maxX = Math.max(...simp.map((p) => p.x));
+  const maxY = Math.max(...simp.map((p) => p.y));
+  const s = S();
+  const parentId = ia.parentId;
+  let x = minX;
+  let y = minY;
+  if (parentId) {
+    const parent = s.doc.nodesById[parentId];
+    if (parent) {
+      const inv = mInvert(nodeWorldMatrix(s.doc, parent));
+      const local = mApply(inv, minX, minY);
+      x = local.x;
+      y = local.y;
+    }
+  }
+  const last = simp[simp.length - 1];
+  const first = simp[0];
+  const closed = Math.hypot(last.x - first.x, last.y - first.y) * zoom < 8;
+  s.addNode(
+    'path',
+    {
+      x,
+      y,
+      w: Math.max(maxX - minX, 1),
+      h: Math.max(maxY - minY, 1),
+      points: simp.map((p) => ({ x: p.x - minX, y: p.y - minY, hx: 0, hy: 0 })),
+      closed,
+      fill: closed ? '#D9D9D9' : null,
+      stroke: closed ? null : '#B3B3B3',
+      strokeWidth: 1,
+    },
+    parentId,
+  );
+  s.setTool('move');
+  requestDraw();
+}
+
+/* ------------------------------------------------------------------ */
+/* scale tool                                                          */
+/* ------------------------------------------------------------------ */
+
+function applyScale(ia: Extract<Interaction, { kind: 'scale' }>, k: number): void {
+  const s = S();
+  const updates: { id: ID; patch: Partial<IrisNode> }[] = [];
+  const rectUpdates: { id: ID; rect: { x: number; y: number; w: number; h: number } }[] = [];
+  for (const n0 of ia.startNodes) {
+    const c0 = ia.startCenters.get(n0.id)!;
+    const cx = ia.anchor.x + (c0.x - ia.anchor.x) * k;
+    const cy = ia.anchor.y + (c0.y - ia.anchor.y) * k;
+    const w = Math.max(0.5, n0.w * k);
+    const h = Math.max(0.5, n0.h * k);
+    // world position of the (rotated) local origin
+    const theta = (n0.rotation * Math.PI) / 180;
+    const ox = -w / 2;
+    const oy = -h / 2;
+    const originWorld = {
+      x: cx + Math.cos(theta) * ox - Math.sin(theta) * oy,
+      y: cy + Math.sin(theta) * ox + Math.cos(theta) * oy,
+    };
+    const Pinv = ia.parentInvs.get(n0.id)!;
+    const local = mApply(Pinv, originWorld.x, originWorld.y);
+    if (n0.type === 'frame' || n0.type === 'group' || n0.type === 'section') {
+      rectUpdates.push({ id: n0.id, rect: { x: local.x, y: local.y, w, h } });
+      continue;
+    }
+    const patch: Partial<IrisNode> = { x: local.x, y: local.y, w, h };
+    if (n0.type === 'text') patch.fontSize = Math.max(1, n0.fontSize * k);
+    if (n0.cornerRadius) patch.cornerRadius = Math.max(0, n0.cornerRadius * k);
+    if (n0.type === 'path' && n0.points.length) {
+      patch.points = n0.points.map((p) => ({ x: p.x * k, y: p.y * k, hx: p.hx * k, hy: p.hy * k }));
+    }
+    if (n0.type === 'line' || n0.type === 'arrow') patch.strokeWidth = Math.max(0.5, n0.strokeWidth * k);
+    updates.push({ id: n0.id, patch });
+  }
+  if (updates.length) {
+    s.updateNodes(
+      updates.map((u) => u.id),
+      (node) => {
+        const u = updates.find((x) => x.id === node.id)!;
+        return u.patch;
+      },
+      { history: false },
+    );
+  }
+  for (const r of rectUpdates) {
+    s.setNodeRect(r.id, r.rect, { history: false });
+  }
+  overlay.dragBadge = {
+    x: ia.anchor.x + (ia.startBox.x - ia.anchor.x) * k,
+    y: ia.anchor.y + (ia.startBox.y - ia.anchor.y) * k,
+    w: ia.startBox.w * k,
+    h: ia.startBox.h * k,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -475,6 +608,22 @@ function onPointerDown(e: PointerEvent): void {
     return;
   }
 
+  if (tool === 'comment') {
+    // clicking adds a comment pin; the CommentLayer UI opens the editor
+    const id = s.addComment(world.x, world.y, '');
+    s.setActiveComment(id);
+    requestDraw();
+    return;
+  }
+
+  if (tool === 'pencil') {
+    const frame = frameAtPoint(s.doc, s.currentPageId, world);
+    interaction = { kind: 'pencil', points: [world], parentId: frame?.id ?? null };
+    overlay.pencilDraft = [world];
+    requestDraw();
+    return;
+  }
+
   if (tool === 'pen') {
     if (!overlay.penDraft) overlay.penDraft = { points: [], cursor: world, dragging: false };
     const draft = overlay.penDraft;
@@ -507,7 +656,8 @@ function onPointerDown(e: PointerEvent): void {
   }
 
   if ((DRAW_TOOLS as string[]).includes(tool)) {
-    const frame = frameAtPoint(s.doc, s.currentPageId, world);
+    // sections + slices always live at the page level (Figma behavior)
+    const frame = tool === 'section' || tool === 'slice' ? null : frameAtPoint(s.doc, s.currentPageId, world);
     interaction = {
       kind: 'draw',
       type: tool as NodeType,
@@ -518,9 +668,49 @@ function onPointerDown(e: PointerEvent): void {
     return;
   }
 
+  // scale tool -------------------------------------------------------
+  if (tool === 'scale') {
+    const hh = hitHandle(content);
+    const ids = topOnly(s.selection);
+    if (
+      hh &&
+      (hh === 'nw' || hh === 'ne' || hh === 'sw' || hh === 'se') &&
+      ids.length > 0
+    ) {
+      const nodes = ids.map((id) => s.doc.nodesById[id]).filter(Boolean) as IrisNode[];
+      const startBox = boundsOfNodes(s.doc, ids);
+      if (nodes.length && startBox) {
+        const anchor = {
+          x: hh.includes('w') ? startBox.x + startBox.w : startBox.x,
+          y: hh.includes('n') ? startBox.y + startBox.h : startBox.y,
+        };
+        const startCenters = new Map<ID, Vec>();
+        const parentInvs = new Map<ID, Mat>();
+        for (const n of nodes) {
+          const box = nodeWorldAABB(s.doc, n);
+          startCenters.set(n.id, { x: box.x + box.w / 2, y: box.y + box.h / 2 });
+          parentInvs.set(n.id, mInvert(parentWorldMatrix(s.doc, n)));
+        }
+        s.historyBegin();
+        interaction = {
+          kind: 'scale',
+          anchor,
+          startDist: Math.max(1, Math.hypot(world.x - anchor.x, world.y - anchor.y)),
+          startNodes: nodes.map((n) => ({ ...n })),
+          startBox,
+          startCenters,
+          parentInvs,
+          moved: false,
+        };
+        return;
+      }
+    }
+    // fall through: scale tool otherwise behaves like move (select + drag)
+  }
+
   // move tool --------------------------------------------------------
-  // handle hit?
-  const hh = hitHandle(content);
+  // handle hit? (not for the scale tool — its handles are scale-only)
+  const hh = s.tool === 'scale' ? null : hitHandle(content);
   if (hh) {
     const ids = topOnly(s.selection);
     const nodes = ids.map((id) => s.doc.nodesById[id]).filter(Boolean) as IrisNode[];
@@ -625,8 +815,9 @@ function onPointerDown(e: PointerEvent): void {
 /** Abort the running interaction gracefully (pinch takeover, etc.). */
 function cancelInteraction(): void {
   const s = S();
-  if (interaction.kind === 'move' || interaction.kind === 'resize' || interaction.kind === 'rotate') {
+  if (interaction.kind === 'move' || interaction.kind === 'resize' || interaction.kind === 'rotate' || interaction.kind === 'scale') {
     if ('ownsHistory' in interaction && interaction.ownsHistory) s.historyCancel();
+    else if (interaction.kind === 'scale') s.historyCancel();
   }
   if (interaction.kind === 'pathPoint' || interaction.kind === 'pathHandle') s.historyCancel();
   interaction = { kind: 'none' };
@@ -635,6 +826,7 @@ function cancelInteraction(): void {
   overlay.dragBadge = null;
   overlay.guides = [];
   overlay.guideDrag = null;
+  overlay.pencilDraft = null;
   requestDraw();
 }
 
@@ -683,8 +875,9 @@ function onPointerMove(e: PointerEvent): void {
       requestDraw();
       return;
     }
-    if (s.tool === 'move') {
-      const hh = hitHandle(content);
+    if (s.tool === 'move' || s.tool === 'scale') {
+      let hh = hitHandle(content);
+      if (s.tool === 'scale' && hh && !(hh === 'nw' || hh === 'ne' || hh === 'sw' || hh === 'se')) hh = null;
       if (hh !== hoverHandle) {
         hoverHandle = hh;
         setCursor(hh ? handleCursor(hh) : overlay.spaceDown ? 'grab' : 'default');
@@ -848,6 +1041,26 @@ function onPointerMove(e: PointerEvent): void {
       requestDraw();
       return;
     }
+    case 'pencil': {
+      const pts = interaction.points;
+      const last = pts[pts.length - 1];
+      if (Math.hypot(world.x - last.x, world.y - last.y) * s.viewport.zoom > 1.5) {
+        pts.push(world);
+        overlay.pencilDraft = pts;
+        requestDraw();
+      }
+      return;
+    }
+    case 'scale': {
+      const k = Math.max(
+        0.02,
+        Math.hypot(world.x - interaction.anchor.x, world.y - interaction.anchor.y) / interaction.startDist,
+      );
+      applyScale(interaction, k);
+      interaction.moved = true;
+      requestDraw();
+      return;
+    }
     case 'penHandle': {
       const draft = overlay.penDraft;
       if (draft && draft.points.length > 0) {
@@ -915,6 +1128,18 @@ function onPointerUp(e: PointerEvent): void {
 
   const world = eventWorld(e);
   switch (interaction.kind) {
+    case 'pencil': {
+      finishPencil();
+      return;
+    }
+    case 'scale': {
+      if (interaction.moved) s.historyCommit();
+      else s.historyCancel();
+      overlay.dragBadge = null;
+      interaction = { kind: 'none' };
+      requestDraw();
+      return;
+    }
     case 'pan': {
       interaction = { kind: 'none' };
       setCursor(toolCursor());
@@ -1364,7 +1589,7 @@ function onKeyDown(e: KeyboardEvent): void {
     if (e.key === 'Escape') (e.target as HTMLElement).blur();
     return;
   }
-  if (s.exportOpen || s.shortcutsOpen) return;
+  if (s.exportOpen || s.shortcutsOpen || s.presenting) return;
   const mod = e.ctrlKey || e.metaKey;
 
   if (e.key === ' ') {
@@ -1429,6 +1654,16 @@ function onKeyDown(e: KeyboardEvent): void {
         e.preventDefault();
         openIrisFile();
         return;
+      case 'k':
+        if (e.shiftKey) {
+          e.preventDefault();
+          switchTool('image');
+        }
+        return;
+      case 'enter':
+        e.preventDefault();
+        s.setPresenting(true);
+        return;
       case 'l':
         e.preventDefault();
         if (e.shiftKey) s.unlockAllOnPage();
@@ -1480,65 +1715,69 @@ function onKeyDown(e: KeyboardEvent): void {
     }
   }
 
-  switch (e.key) {
+  // Shift+R → toggle rulers
+  if (e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+    s.setViewFlag('rulers', !s.viewFlags.rulers);
+    return;
+  }
+
+  switch (e.key.toLowerCase()) {
     case 'v':
-    case 'V':
       switchTool('move');
       return;
+    case 'k':
+      switchTool('scale');
+      return;
     case 'f':
-    case 'F':
       switchTool('frame');
       return;
     case 'r':
-    case 'R':
       switchTool('rect');
       return;
     case 'o':
-    case 'O':
       switchTool('ellipse');
       return;
     case 'l':
-    case 'L':
-      switchTool('line');
+      switchTool(e.shiftKey ? 'arrow' : 'line');
       return;
     case 't':
-    case 'T':
       switchTool('text');
       return;
     case 'p':
-    case 'P':
-      switchTool('pen');
+      switchTool(e.shiftKey ? 'pencil' : 'pen');
       return;
     case 'h':
-      if (e.shiftKey) break; // handled above
-      switchTool('hand');
-      return;
-    case 'H':
+      if (e.shiftKey) break; // handled above (flip)
       switchTool('hand');
       return;
     case 'y':
-    case 'Y':
       switchTool('polygon');
       return;
     case 's':
-    case 'S':
-      switchTool('star');
+      switchTool(e.shiftKey ? 'section' : 'slice');
       return;
-    case 'a':
-    case 'A':
-      switchTool('arrow');
+    case 'c':
+      switchTool('comment');
       return;
     case 'i':
-    case 'I':
       switchTool('eyedropper');
       return;
     case 'm':
-    case 'M':
       switchTool('image');
       return;
-    case 'Escape': {
+    case 'escape': {
       if (overlay.penDraft) {
         finishPen(false);
+        return;
+      }
+      if (overlay.pencilDraft) {
+        overlay.pencilDraft = null;
+        if (interaction.kind === 'pencil') interaction = { kind: 'none' };
+        requestDraw();
+        return;
+      }
+      if (s.presenting) {
+        s.setPresenting(false);
         return;
       }
       if (s.editingPathId) {
@@ -1553,6 +1792,10 @@ function onKeyDown(e: KeyboardEvent): void {
         requestDraw();
         return;
       }
+      if (s.activeCommentId) {
+        s.setActiveComment(null);
+        return;
+      }
       if (s.selection.length) {
         s.setSelection([]);
         return;
@@ -1560,7 +1803,7 @@ function onKeyDown(e: KeyboardEvent): void {
       if (s.tool !== 'move') s.setTool('move');
       return;
     }
-    case 'Enter': {
+    case 'enter': {
       if (overlay.penDraft) {
         finishPen(false);
         return;
@@ -1591,15 +1834,15 @@ function onKeyDown(e: KeyboardEvent): void {
       }
       return;
     }
-    case 'Delete':
-    case 'Backspace':
+    case 'delete':
+    case 'backspace':
       e.preventDefault();
       s.deleteSelection();
       return;
-    case 'ArrowLeft':
-    case 'ArrowRight':
-    case 'ArrowUp':
-    case 'ArrowDown': {
+    case 'arrowleft':
+    case 'arrowright':
+    case 'arrowup':
+    case 'arrowdown': {
       e.preventDefault();
       if (!s.selection.length) return;
       const step = e.shiftKey ? 10 : 1;

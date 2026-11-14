@@ -1,12 +1,25 @@
 'use client';
 
 /**
- * Title bar: iris logo, native-style menu bar (File / Edit / View / Help),
- * a centered document-name editor with dirty indicator, and a badge.
+ * Title bar, two rows (per spec screenshots):
+ *   Row 1 — app menu bar: Iris logo, File / Insert / Edit / View / Help,
+ *           right side: save status + presentation toggle.
+ *   Row 2 — tab bar: home button, the document tab (name + close), "+" new
+ *           doc, right side: quick actions search + window controls.
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import {
+  ChevronDown,
+  Cloud,
+  Minus,
+  Play,
+  Plus,
+  Search,
+  Square,
+  X,
+} from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -61,17 +74,17 @@ function timeAgo(ts: number): string {
 /* ------------------------------------------------------------------ */
 
 /** Iris flower mark: three petals rotated 0/120/240 degrees + white core. */
-function IrisLogo() {
+function IrisLogo({ size = 16 }: { size?: number }) {
   return (
     <svg
-      width="16"
-      height="16"
+      width={size}
+      height={size}
       viewBox="0 0 16 16"
       aria-hidden="true"
       focusable="false"
       className="shrink-0"
     >
-      <g fill="#8B5CF6">
+      <g fill="#0D99FF">
         <ellipse cx="8" cy="4.6" rx="2.7" ry="4.5" />
         <ellipse cx="8" cy="4.6" rx="2.7" ry="4.5" transform="rotate(120 8 8)" />
         <ellipse cx="8" cy="4.6" rx="2.7" ry="4.5" transform="rotate(240 8 8)" />
@@ -81,7 +94,7 @@ function IrisLogo() {
   );
 }
 
-/** One top-level menu (File / Edit / View / Help). */
+/** One top-level menu (File / Insert / Edit / View / Help). */
 function TopMenu({
   label,
   onOpenChange,
@@ -96,7 +109,7 @@ function TopMenu({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="h-7 rounded px-2 text-[12px] text-[#C9C9C9] hover:bg-[#383838] data-[state=open]:bg-[#383838]"
+          className="h-6 rounded px-2 text-[12px] text-[#C9C9C9] hover:bg-[#383838] data-[state=open]:bg-[#383838]"
         >
           {label}
         </button>
@@ -154,16 +167,18 @@ export function TitleBar() {
   const guideCount = useIris(
     (s) => s.doc.settings.guidesX.length + s.doc.settings.guidesY.length,
   );
+  const inspectMode = useIris((s) => s.inspectMode);
 
   const actions = useIris(
     useShallow((s) => ({
       newDoc: s.newDoc,
       loadDoc: s.loadDoc,
       goHome: s.goHome,
-      setDocName: s.setDocName,
       setExportOpen: s.setExportOpen,
       setShortcutsOpen: s.setShortcutsOpen,
       setViewFlag: s.setViewFlag,
+      setInspectMode: s.setInspectMode,
+      setPresenting: s.setPresenting,
       zoomAt: s.zoomAt,
       zoomReset: s.zoomReset,
       zoomToFit: s.zoomToFit,
@@ -193,22 +208,11 @@ export function TitleBar() {
       clearGuides: s.clearGuides,
       viewport: s.viewport,
       canvasSize: s.canvasSize,
+      toast: s.toast,
     })),
   );
 
   const [recents, setRecents] = useState<RecentDoc[]>([]);
-  const [nameDraft, setNameDraft] = useState(docName);
-
-  /* keep the draft in sync when the doc name changes elsewhere (undo / open) */
-  useEffect(() => {
-    setNameDraft(docName);
-  }, [docName]);
-
-  const commitName = (): void => {
-    const trimmed = nameDraft.trim();
-    if (trimmed && trimmed !== docName) actions.setDocName(trimmed);
-    else setNameDraft(docName);
-  };
 
   /** insert a centered frame of a preset size */
   const insertFrame = (w: number, h: number, name: string): void => {
@@ -223,15 +227,15 @@ export function TitleBar() {
   };
 
   return (
-    <header className="relative flex h-9 items-center gap-1 border-b border-[#3E3E3E] bg-[#1E1E1E] px-2">
-      {/* left: logo + menus */}
-      <div className="flex items-center gap-1">
+    <header className="relative z-30 shrink-0">
+      {/* ── row 1: app menu bar ─────────────────────────────────── */}
+      <div className="flex h-8 items-center gap-1 border-b border-[#2A2A2A] bg-[#1E1E1E] px-2">
         <button
           type="button"
           onClick={() => actions.goHome()}
-          title="Back to files"
+          title="Iris — back to files"
           aria-label="Iris — back to files"
-          className="flex h-7 w-7 items-center justify-center rounded hover:bg-[#383838]"
+          className="flex h-6 w-7 items-center justify-center rounded hover:bg-[#383838]"
         >
           <IrisLogo />
         </button>
@@ -249,7 +253,7 @@ export function TitleBar() {
           <MenuEntry label="Save" shortcut="Ctrl+S" action={() => void saveIrisFile()} />
           <MenuEntry label="Save As…" shortcut="Ctrl+Shift+S" action={() => void saveIrisFile({ as: true })} />
           <DropdownMenuSeparator className={SEP_CLS} />
-          <MenuEntry label="Export…" action={() => actions.setExportOpen(true)} />
+          <MenuEntry label="Export…" shortcut="Ctrl+Shift+E" action={() => actions.setExportOpen(true)} />
           <DropdownMenuSeparator className={SEP_CLS} />
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className={ITEM_CLS}>Open Recent</DropdownMenuSubTrigger>
@@ -295,13 +299,21 @@ export function TitleBar() {
 
         <TopMenu label="Insert">
           <MenuEntry label="Frame" shortcut="F" action={() => useIris.getState().setTool('frame')} />
+          <MenuEntry label="Section" shortcut="Shift+S" action={() => useIris.getState().setTool('section')} />
+          <MenuEntry label="Slice" shortcut="S" action={() => useIris.getState().setTool('slice')} />
+          <DropdownMenuSeparator className={SEP_CLS} />
           <MenuEntry label="Rectangle" shortcut="R" action={() => useIris.getState().setTool('rect')} />
+          <MenuEntry label="Line" shortcut="L" action={() => useIris.getState().setTool('line')} />
+          <MenuEntry label="Arrow" shortcut="Shift+L" action={() => useIris.getState().setTool('arrow')} />
           <MenuEntry label="Ellipse" shortcut="O" action={() => useIris.getState().setTool('ellipse')} />
           <MenuEntry label="Polygon" shortcut="Y" action={() => useIris.getState().setTool('polygon')} />
-          <MenuEntry label="Star" shortcut="S" action={() => useIris.getState().setTool('star')} />
-          <MenuEntry label="Arrow" shortcut="A" action={() => useIris.getState().setTool('arrow')} />
+          <MenuEntry label="Star" action={() => useIris.getState().setTool('star')} />
+          <DropdownMenuSeparator className={SEP_CLS} />
           <MenuEntry label="Text" shortcut="T" action={() => useIris.getState().setTool('text')} />
-          <MenuEntry label="Image…" shortcut="M" action={() => pickImageFiles()} />
+          <MenuEntry label="Pen" shortcut="P" action={() => useIris.getState().setTool('pen')} />
+          <MenuEntry label="Pencil" shortcut="Shift+P" action={() => useIris.getState().setTool('pencil')} />
+          <MenuEntry label="Comment" shortcut="C" action={() => useIris.getState().setTool('comment')} />
+          <MenuEntry label="Image…" shortcut="Ctrl+Shift+K" action={() => pickImageFiles()} />
           <DropdownMenuSeparator className={SEP_CLS} />
           <DropdownMenuItem className="text-[11px] text-[#8B8B8B]" disabled>
             Frame presets
@@ -445,51 +457,140 @@ export function TitleBar() {
           >
             Snap to Grid
           </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            className={ITEM_CLS}
+            checked={inspectMode}
+            onCheckedChange={(v) => {
+              blurActive();
+              actions.setInspectMode(v);
+            }}
+          >
+            Inspect Code Mode
+          </DropdownMenuCheckboxItem>
           <DropdownMenuSeparator className={SEP_CLS} />
           <MenuEntry label="Clear Guides" disabled={guideCount === 0} action={actions.clearGuides} />
           <MenuEntry label="Fullscreen" action={toggleFullscreen} />
         </TopMenu>
 
         <TopMenu label="Help">
-          <MenuEntry label="Keyboard Shortcuts" action={() => actions.setShortcutsOpen(true)} />
+          <MenuEntry label="Keyboard Shortcuts" shortcut="?" action={() => actions.setShortcutsOpen(true)} />
           <DropdownMenuSeparator className={SEP_CLS} />
           <DropdownMenuItem className="text-[12px] text-[#8B8B8B]" disabled>
-            Iris v1 — local-first, MIT licensed
+            Iris v2 — local-first, MIT licensed
           </DropdownMenuItem>
         </TopMenu>
+
+        {/* right: save status + present */}
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            className="flex h-6 items-center gap-1.5 rounded px-1.5 text-[11px] text-[#9A9A9A] hover:bg-[#383838] hover:text-[#E5E5E5]"
+            title={dirty ? 'Unsaved changes — autosaves locally' : 'All changes saved locally'}
+            aria-label={dirty ? 'Unsaved changes' : 'All changes saved'}
+            onClick={() => void saveIrisFile()}
+          >
+            <Cloud size={14} strokeWidth={1.75} aria-hidden className={dirty ? 'text-[#0D99FF]' : ''} />
+            <span className="hidden sm:inline">{dirty ? 'Saving…' : 'Saved'}</span>
+          </button>
+          <button
+            type="button"
+            className="flex h-6 items-center gap-1.5 rounded px-1.5 text-[11px] text-[#C9C9C9] hover:bg-[#383838] hover:text-white"
+            title="Presentation — Ctrl+Enter"
+            aria-label="Start presentation"
+            onClick={() => actions.setPresenting(true)}
+          >
+            <Play size={13} strokeWidth={2} aria-hidden />
+            <span className="hidden sm:inline">Present</span>
+          </button>
+        </div>
       </div>
 
-      {/* center: document name + dirty dot */}
-      <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-2">
-        <span
-          className={`h-1.5 w-1.5 rounded-full ${dirty ? 'bg-[#8B5CF6]' : 'bg-[#5B5B5B]'}`}
-          title={dirty ? 'Unsaved changes' : 'All changes saved'}
-          aria-hidden="true"
-        />
-        <input
-          className="w-40 rounded bg-transparent text-center text-[12px] font-medium text-white focus:bg-[#2C2C2C] focus:outline-none focus:ring-1 focus:ring-[#4E4E4E]"
-          value={nameDraft}
-          aria-label="Document name"
-          spellCheck={false}
-          onChange={(e) => setNameDraft(e.target.value)}
-          onBlur={commitName}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              commitName();
-              e.currentTarget.blur();
-            } else if (e.key === 'Escape') {
-              setNameDraft(docName);
-              e.currentTarget.blur();
-            }
-          }}
-        />
-      </div>
+      {/* ── row 2: tab bar ──────────────────────────────────────── */}
+      <div className="flex h-9 items-center gap-1 border-b border-[#2A2A2A] bg-[#2C2C2C] px-1.5">
+        <button
+          type="button"
+          className="iris-icon-btn h-7! w-7!"
+          aria-label="Home — file browser"
+          title="Home"
+          onClick={() => actions.goHome()}
+        >
+          <IrisLogo size={15} />
+        </button>
 
-      {/* right: badge */}
-      <div className="ml-auto">
-        <span className="rounded border border-[#3E3E3E] px-1.5 py-0.5 text-[10px] text-[#9A9A9A]">
-          Local-first
-        </span>
+        {/* the document tab */}
+        <div className="group flex h-7 max-w-[220px] items-center gap-1.5 rounded-t-lg border border-b-0 border-[#3E3E3E] bg-[#1E1E1E] px-2.5" role="tab" aria-selected="true">
+          <IrisLogo size={12} />
+          <span className="min-w-0 truncate text-[11px] font-medium text-[#E5E5E5]">{docName}</span>
+          <span
+            className={`h-1 w-1 shrink-0 rounded-full ${dirty ? 'bg-[#0D99FF]' : 'bg-transparent'}`}
+            title={dirty ? 'Unsaved changes' : 'Saved'}
+            aria-hidden="true"
+          />
+          <button
+            type="button"
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#9A9A9A] transition-colors hover:bg-[#474747] hover:text-white"
+            aria-label="Close file — back to files"
+            title="Close"
+            onClick={() => actions.goHome()}
+          >
+            <X size={12} strokeWidth={2} aria-hidden />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className="iris-icon-btn h-7! w-7!"
+          aria-label="New document"
+          title="New document"
+          onClick={() => actions.newDoc()}
+        >
+          <Plus size={15} strokeWidth={2} aria-hidden />
+        </button>
+
+        {/* right: quick actions + window controls */}
+        <div className="ml-auto flex items-center gap-0.5">
+          <button
+            type="button"
+            className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[11px] text-[#9A9A9A] transition-colors hover:bg-[#383838] hover:text-[#E5E5E5]"
+            aria-label="Search menu"
+            title="Search menu (Ctrl+/)"
+            onClick={() => actions.setShortcutsOpen(true)}
+          >
+            <Search size={13} strokeWidth={2} aria-hidden />
+            <span className="hidden md:inline">Search</span>
+            <ChevronDown size={11} strokeWidth={2} aria-hidden className="hidden md:inline" />
+          </button>
+
+          <div className="mx-1 h-4 w-px bg-[#3E3E3E]" aria-hidden />
+
+          <button
+            type="button"
+            className="iris-icon-btn h-7! w-8!"
+            aria-label="Minimize (preview)"
+            title="Minimize"
+            onClick={() => actions.toast('Window controls are decorative in the web preview')}
+          >
+            <Minus size={13} strokeWidth={2} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="iris-icon-btn h-7! w-8!"
+            aria-label="Toggle fullscreen"
+            title="Fullscreen"
+            onClick={toggleFullscreen}
+          >
+            <Square size={12} strokeWidth={2} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="flex h-7 w-8 items-center justify-center rounded-md text-[#9A9A9A] transition-colors hover:bg-[#F24822] hover:text-white"
+            aria-label="Close file — back to files"
+            title="Close"
+            onClick={() => actions.goHome()}
+          >
+            <X size={14} strokeWidth={2} aria-hidden />
+          </button>
+        </div>
       </div>
     </header>
   );

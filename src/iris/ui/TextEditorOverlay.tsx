@@ -79,7 +79,7 @@ export function TextEditorOverlay() {
     lineHeight: `${node.fontSize * node.lineHeight * viewport.zoom}px`,
     textAlign: node.textAlign,
     color: node.fill ?? '#000000',
-    caretColor: '#8B5CF6',
+    caretColor: '#0D99FF',
   };
 
   return (

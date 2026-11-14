@@ -48,48 +48,86 @@ under MIT.
 
 ### Canvas
 - Infinite pan (Space + drag, middle-drag, Hand tool `H`) and zoom-to-cursor (`Ctrl` + wheel)
-- Zoom controls, zoom to fit (`Shift+1`), zoom to selection (`Shift+2`), reset 100% (`Ctrl+0`)
-- Rulers, pixel grid at high zoom, frame name labels
+- Zoom controls, zoom to fit (`Shift+1`), zoom to selection (`Shift+2`), reset 100% (`Ctrl+0`), zoom preset dropdown in the right panel
+- Rulers (`Shift+R`), draggable ruler guides, pixel grid at high zoom, layout grid with snap
+- Frame name labels and big section labels, outline mode, canvas background color
 
-### Tools *(Figma shortcuts)*
-- Move `V` · Frame `F` · Rectangle `R` · Ellipse `O` · Line `L` · Pen `P` · Text `T` · Hand `H`
-- Image import via toolbar, drag-and-drop, or paste
+### Tools *(Figma UI3 toolbar — grouped, with dropdowns)*
+- **Move group** — Move `V` · Scale `K` · Hand `H`
+- **Frame group** — Frame `F` · Section `Shift+S` · Slice `S`
+- **Shape group** — Rectangle `R` · Line `L` · Arrow `Shift+L` · Ellipse `O` · Polygon `Y` · Star · Image/video `Ctrl+Shift+K`
+- **Pen group** — Pen `P` (click = corner, drag = mirrored smooth handles) · Pencil `Shift+P` (freehand, auto-close)
+- **Text group** — Text `T` with in-canvas editing overlay
+- **Actions menu** — Presentation, Export…, Place image, Shortcuts
+- **Comment tool** `C` — Figma-style comment pins with author, timestamp, resolve and threads
+- **Eyedropper** `I` — sample any canvas pixel into the selection's fill
+- Toolbar view toggles: Hand, Rulers, Pixel grid, Inspect code mode
 
 ### Objects
-- Frames (with clipping + children), groups (`Ctrl+G` / `Ctrl+Shift+G`)
-- Rects with corner radius, ellipses, lines, bezier paths, text, images
-- In-canvas text editing overlay; pen tool with click = corner, drag = mirrored
-  smooth handles; double-click a vector to edit points and handles
+- Frames (with clipping + children) and groups (`Ctrl+G` / `Ctrl+Shift+G`)
+- **Sections** — big labeled backdrop regions for organizing the canvas
+- **Slices** — dashed export regions; exporting a slice rasterizes the area it covers
+- Rects with corner radius, ellipses, lines, arrows with configurable heads, polygons, stars, bezier paths, text, images
+- 18 frame size presets (Phone / Tablet / Desktop / Paper / Slide / Social / Watch) in the right panel
+- Alt-drag duplicate, Alt-resize from center, Shift-constrain
 
 ### Selection & transform
 - Click, Shift multi-select, marquee, Ctrl-click deep select, double-click into groups/frames
-- 8 resize handles + rotation handle, Shift-constrain, Alt-center resize, Alt-drag duplicate
+- 8 resize handles + rotation handle; **Scale tool `K`** with corner handles that scales
+  strokes, corner radii and font sizes — for the whole selection including frame children
+- Flip H/V (`Shift+H` / `Shift+V`), rotate 90° steps, free rotation with Shift snapping
 - Arrow-key nudge (`Shift` = 10 px), smart snap guides to sibling edges/centers
+- Z-order: bring forward/backward (`]` `[`), to front/back (`Ctrl+]` `Ctrl+[`)
 
 ### Panels
-- **Layers** — pages, tree with type icons, visibility/lock toggles, inline rename, drag reorder
-- **Properties** — X/Y/W/H/rotation/radius, opacity, fill, stroke, full text controls,
-  6 alignments + 2 distributes
+- **Left rail** — Home, Layers, Assets, Comments, Help navigation
+- **Layers** — pages with per-page search, tree with type icons (topmost layer first, Figma
+  order), visibility/lock toggles, inline rename, drag reorder (drag up = bring to front),
+  shift-range select, page duplicate/reorder/delete
+- **Assets** — every image used in the file as a clickable grid; click to place another copy
+- **Comments** — list of pins with open/resolved counts, pin visibility toggle
+- **Properties** — Design/Prototype tabs; X/Y/W/H/rotation/radius, opacity, blend modes,
+  fill (solid + linear/radial gradients), stroke (weight/dash), effects (drop shadow, layer
+  blur), full text controls (family/size/weight/align/line-height/letter-spacing/case),
+  6 alignments + 2 distributes, frame clip toggle, polygon sides, star points/inner radius,
+  arrow heads
+- **Inspect mode** — live SVG markup of the selection with copy-to-clipboard
+- **Prototype tab** — presentation launcher with the frame flow list
 
-### Documents
+### Presentation mode
+- Fullscreen frame presentation (`Ctrl+Enter` or the play button)
+- Arrow / Space / PageUp / PageDown navigation, Home/End jumps, click to advance, Esc to exit
+- Frame name + position bar at the bottom
+
+### Documents & files
 - Undo/redo with snapshot history and coalescing (`Ctrl+Z` / `Ctrl+Shift+Z`)
 - `.iris` JSON documents (New / Open / Save / Save As), debounced localStorage autosave, recent documents
-- Export to PNG (1×/2×) and SVG — selection, frame or page
+- Export to PNG/JPG (1×–4×, transparent background) and SVG — selection, frame, page or slice region
+- Document templates (Mobile app, Web wireframe, Kanban, Poster) from the file browser
+- Fake-but-featured account flow, Share dialog with copy-link and permissions (preview)
+
+### Editor shell (Figma UI3 clone)
+- Two-row title bar: app menus (File / Insert / Edit / View / Help) + tab bar with document
+  tab, quick actions and window controls
+- Bottom-center floating pill toolbar with grouped tools, chevrons, blue active state
+- Bottom-right circular help button; shortcut overlay (`?`)
+- Toasts with Undo actions, dirty/saved cloud indicator, avatars and Share button
 
 ## ⌨️ Keyboard shortcuts
 
 | Context | Shortcut | Action |
 |---|---|---|
-| Tools | `V` `F` `R` `O` `L` `P` `T` `H` | Move · Frame · Rect · Ellipse · Line · Pen · Text · Hand |
+| Tools | `V` `K` `F` `R` `O` `L` `T` `P` `C` `I` `H` | Move · Scale · Frame · Rect · Ellipse · Line · Text · Pen · Comment · Eyedropper · Hand |
+| Tools | `Shift+S` / `S` / `Shift+L` / `Shift+P` | Section · Slice · Arrow · Pencil |
 | View | `Ctrl` + wheel | Zoom to cursor |
 | View | `Shift+1` / `Shift+2` / `Ctrl+0` | Zoom to fit / selection / 100% |
+| View | `Shift+R` / `Ctrl+Enter` | Rulers · Presentation |
 | View | `Space` + drag | Pan |
 | Edit | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
 | Edit | `Ctrl+G` / `Ctrl+Shift+G` | Group / ungroup |
-| Edit | `Ctrl+D` | Duplicate |
-| Edit | `Alt` + drag | Duplicate & drag |
+| Edit | `Ctrl+D` / `Alt` + drag | Duplicate |
 | Edit | Arrows (+`Shift`) | Nudge 1 px (10 px) |
-| Files | `Ctrl+S` / `Ctrl+O` | Save / open `.iris` |
+| Files | `Ctrl+S` / `Ctrl+O` / `Ctrl+Shift+E` | Save · open · export |
 | Home | `/` | Focus file search |
 
 Press `?` inside the studio for the full in-app shortcut overlay.
