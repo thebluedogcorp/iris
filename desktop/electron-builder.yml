@@ -1,0 +1,57 @@
+# Iris desktop — electron-builder configuration.
+#
+# Build:      bun run dist            (never publishes)
+# Publish:    bun run dist:publish    (uploads to GitHub Releases; CI does
+#                                      this automatically on v* tags)
+#
+# The Windows build is fully cross-platform (Linux/macOS/Windows CI): the exe
+# icon + version resource are patched by scripts/edit-exe.cjs (resedit, pure
+# JS) instead of rcedit/wine.
+
+appId: com.thebluedogcorp.iris
+productName: Iris
+copyright: Copyright © 2025 The Blue Dog Corp. (MIT License)
+
+directories:
+  output: release
+  buildResources: build
+
+# Everything the packaged app needs (electron + electron-updater are added
+# automatically by electron-builder).
+files:
+  - dist/**
+  - app-web/**
+  - package.json
+  - "!**/*.map"
+
+compression: maximum
+
+win:
+  icon: build/icon.ico
+  # icon/version patching is done by the resedit afterPack hook — no wine
+  signAndEditExecutable: false
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Iris
+  artifactName: Iris-Setup-${version}.${ext}
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  deleteAppDataOnUninstall: false
+  installerHeaderIcon: build/icon.ico
+
+afterPack: scripts/edit-exe.cjs
+
+publish:
+  provider: github
+  owner: thebluedogcorp
+  repo: iris
+  releaseType: release

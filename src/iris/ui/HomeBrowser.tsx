@@ -64,7 +64,7 @@ import {
 import { useIris } from '../engine/store';
 import { openIrisFile } from '../engine/files';
 import { TEMPLATES } from '../engine/templates';
-import { getSession, initialsFor, signOut } from '../auth/session';
+import { WindowControls, onDragRegionDoubleClick } from '../desktop/WindowControls';
 import {
   deleteDocInLibrary,
   duplicateDocInLibrary,
@@ -182,48 +182,6 @@ function Thumb({ entry, tiny = false }: { entry: LibEntry; tiny?: boolean }) {
     <div className="flex h-full w-full items-center justify-center" aria-hidden="true">
       <IrisMark size={tiny ? 18 : 40} className="opacity-25" />
     </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* account chip (preview session — sign out returns to the website)    */
-/* ------------------------------------------------------------------ */
-
-function AccountChip() {
-  const session = getSession();
-  if (!session) return null;
-  const initials = initialsFor(session.name);
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Account: ${session.name}`}
-          className="flex size-8 items-center justify-center rounded-full bg-[#0D99FF] text-[11px] font-semibold text-white ring-offset-2 ring-offset-[#1E1E1E] transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0D99FF]"
-        >
-          {initials}
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className={MENU_CLS}>
-        <div className="px-2.5 py-2">
-          <p className="max-w-[200px] truncate text-[12px] font-medium text-white">{session.name}</p>
-          <p className="max-w-[200px] truncate text-[11px] text-[#9A9A9A]">{session.email}</p>
-          <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-[#383838] px-1.5 py-0.5 text-[9.5px] uppercase tracking-wide text-[#C9A7FF]">
-            Preview account
-          </p>
-        </div>
-        <DropdownMenuSeparator className="bg-[#3E3E3E]" />
-        <DropdownMenuItem
-          className={DANGER_CLS}
-          onSelect={() => {
-            signOut();
-            useIris.getState().toast('Signed out — see you soon');
-          }}
-        >
-          Sign out &amp; back to website
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 
@@ -350,7 +308,11 @@ export function HomeBrowser() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-[#1E1E1E] font-sans text-white antialiased">
       {/* ------------------------------ header ------------------------------ */}
-      <header className="flex h-14 shrink-0 select-none items-center gap-2 border-b border-[#3E3E3E] px-3 sm:gap-3 sm:px-4">
+      <header
+        className="flex h-14 shrink-0 select-none items-center gap-2 border-b border-[#3E3E3E] px-3 sm:gap-3 sm:px-4"
+        data-drag
+        onDoubleClick={onDragRegionDoubleClick}
+      >
         <div className="flex shrink-0 items-center gap-2" aria-label="Iris">
           <IrisMark size={22} />
           <span className="text-[15px] font-semibold tracking-tight">Iris</span>
@@ -399,7 +361,6 @@ export function HomeBrowser() {
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <AccountChip />
           <button
             type="button"
             onClick={importFile}
@@ -417,6 +378,10 @@ export function HomeBrowser() {
             <span className="hidden sm:inline">New design file</span>
             <span className="sm:hidden">New</span>
           </button>
+          {/* real window controls inside the desktop app (hidden on the web) */}
+          <div className="-mr-1.5 ml-1 hidden md:block">
+            <WindowControls />
+          </div>
         </div>
       </header>
 
@@ -678,7 +643,7 @@ export function HomeBrowser() {
       {/* ------------------------------ footer ------------------------------ */}
       <footer className="mt-auto flex h-9 shrink-0 select-none items-center justify-between border-t border-[#3E3E3E] px-4 text-[11px] text-[#7A7A7A]">
         <span>
-          {stats.count} {stats.count === 1 ? 'file' : 'files'} · {formatBytes(stats.bytes)} stored locally in your browser
+          {stats.count} {stats.count === 1 ? 'file' : 'files'} · {formatBytes(stats.bytes)} stored locally on this device
         </span>
         <span className="hidden sm:inline">Iris — local-first design tool</span>
       </footer>
@@ -826,7 +791,7 @@ function EmptyLibrary({ onNew, onImport }: { onNew: () => void; onImport: () => 
       <h2 className="mt-5 text-[18px] font-semibold text-white">Your designs live here</h2>
       <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-[#9A9A9A]">
         Create a new design file or import an existing <span className="font-medium text-[#C9C9C9]">.iris</span> document.
-        Everything is stored locally in your browser — no account, no cloud.
+        Everything is stored locally on this device — no account, no cloud.
       </p>
       <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
         <button

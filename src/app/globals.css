@@ -337,20 +337,35 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Iris — marketing site styles (landing + account pages)
-   Warm "paper" aesthetic: Fraunces display face, smooth anchor scrolling.
+   Iris desktop app (Electron) — frameless-window integration.
+   The `.iris-desktop` class is added to <html> by the desktop wiring hook
+   when the preload bridge is present; on the web these rules never apply.
 --------------------------------------------------------------------------- */
-.font-display {
-  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
-  font-optical-sizing: auto;
+.iris-desktop [data-drag] {
+  -webkit-app-region: drag;
 }
-
-html {
-  scroll-behavior: smooth;
+/* Interactive children inside a drag region must opt out, otherwise clicks
+   land on the drag layer instead of the button / menu / input. */
+.iris-desktop [data-drag] * {
+  -webkit-app-region: no-drag;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
+/* Native-feeling text selection cursor for draggable chrome. */
+.iris-desktop [data-drag] {
+  user-select: none;
+}
+/* Slim, unobtrusive scrollbars inside the desktop shell (and web). */
+.iris-app ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.iris-app ::-webkit-scrollbar-thumb {
+  background: #3e3e3e;
+  border-radius: 6px;
+  border: 2px solid #1e1e1e;
+}
+.iris-app ::-webkit-scrollbar-thumb:hover {
+  background: #4e4e4e;
+}
+.iris-app ::-webkit-scrollbar-corner {
+  background: transparent;
 }

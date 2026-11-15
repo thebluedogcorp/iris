@@ -1,0 +1,33 @@
+{
+  "name": "iris-desktop",
+  "productName": "Iris",
+  "version": "1.0.0",
+  "description": "Iris — the open-source, local-first design studio for your desktop.",
+  "author": {
+    "name": "The Blue Dog Corp.",
+    "email": "hello@thebluedogcorp.dev"
+  },
+  "license": "MIT",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "postinstall": "node scripts/patch-electron-builder.cjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "compile": "tsc -p tsconfig.json",
+    "dev": "bun run compile && electron . --dev",
+    "sync:web": "node scripts/sync-web.mjs",
+    "build:web": "cd .. && IRIS_DESKTOP=1 bun run build:desktop",
+    "dist": "node scripts/package.mjs",
+    "dist:publish": "node scripts/package.mjs --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12",
+    "resedit": "^2.0.3",
+    "typescript": "^5.9.0"
+  }
+}

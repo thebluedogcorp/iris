@@ -8,18 +8,9 @@
  *           doc, right side: quick actions search + window controls.
  */
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import {
-  ChevronDown,
-  Cloud,
-  Minus,
-  Play,
-  Plus,
-  Search,
-  Square,
-  X,
-} from 'lucide-react';
+import { ChevronDown, Cloud, Play, Plus, Search, X } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -34,6 +25,8 @@ import {
 import { useIris } from '../engine/store';
 import { clearRecents, getRecents, openIrisFile, pickImageFiles, saveIrisFile, type RecentDoc } from '../engine/files';
 import { screenToWorld } from '../engine/geometry';
+import { desktopBridge, isDesktop } from '../desktop/bridge';
+import { WindowControls, onDragRegionDoubleClick } from '../desktop/WindowControls';
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
@@ -148,6 +141,41 @@ function MenuEntry({
   );
 }
 
+/** Help menu — “Check for Updates…” (desktop only, via the preload bridge). */
+function UpdateMenuItem() {
+  const toast = useIris((s) => s.toast);
+  const [checking, setChecking] = useState(false);
+  if (!isDesktop()) return null;
+
+  const check = async (): Promise<void> => {
+    const bridge = desktopBridge();
+    if (!bridge || checking) return;
+    setChecking(true);
+    const result = await bridge.updates.check();
+    setChecking(false);
+    if (!result.ok) {
+      toast(`Update check failed — ${result.message}`);
+    } else if (result.updateAvailable) {
+      toast(`Iris ${result.version} is downloading…`);
+    } else {
+      toast(`Iris is up to date (v${result.version})`);
+    }
+  };
+
+  return (
+    <DropdownMenuItem
+      className={ITEM_CLS}
+      disabled={checking}
+      onSelect={() => {
+        blurActive();
+        void check();
+      }}
+    >
+      {checking ? 'Checking for updates…' : 'Check for Updates…'}
+    </DropdownMenuItem>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* TitleBar                                                            */
 /* ------------------------------------------------------------------ */
@@ -213,6 +241,8 @@ export function TitleBar() {
   );
 
   const [recents, setRecents] = useState<RecentDoc[]>([]);
+  /* bridge version is available synchronously (ssr-disabled client bundle) */
+  const [appVersion] = useState<string | null>(() => desktopBridge()?.version ?? null);
 
   /** insert a centered frame of a preset size */
   const insertFrame = (w: number, h: number, name: string): void => {
@@ -229,7 +259,11 @@ export function TitleBar() {
   return (
     <header className="relative z-30 shrink-0">
       {/* ── row 1: app menu bar ─────────────────────────────────── */}
-      <div className="flex h-8 items-center gap-1 border-b border-[#2A2A2A] bg-[#1E1E1E] px-2">
+      <div
+        className="flex h-8 items-center gap-1 border-b border-[#2A2A2A] bg-[#1E1E1E] px-2"
+        data-drag
+        onDoubleClick={onDragRegionDoubleClick}
+      >
         <button
           type="button"
           onClick={() => actions.goHome()}
@@ -474,9 +508,10 @@ export function TitleBar() {
 
         <TopMenu label="Help">
           <MenuEntry label="Keyboard Shortcuts" shortcut="?" action={() => actions.setShortcutsOpen(true)} />
+          <UpdateMenuItem />
           <DropdownMenuSeparator className={SEP_CLS} />
           <DropdownMenuItem className="text-[12px] text-[#8B8B8B]" disabled>
-            Iris v2 — local-first, MIT licensed
+            {appVersion ? `Iris Desktop v${appVersion} — local-first, MIT licensed` : 'Iris — local-first, MIT licensed'}
           </DropdownMenuItem>
         </TopMenu>
 
@@ -506,7 +541,11 @@ export function TitleBar() {
       </div>
 
       {/* ── row 2: tab bar ──────────────────────────────────────── */}
-      <div className="flex h-9 items-center gap-1 border-b border-[#2A2A2A] bg-[#2C2C2C] px-1.5">
+      <div
+        className="flex h-9 items-center gap-1 border-b border-[#2A2A2A] bg-[#2C2C2C] px-1.5"
+        data-drag
+        onDoubleClick={onDragRegionDoubleClick}
+      >
         <button
           type="button"
           className="iris-icon-btn h-7! w-7!"
@@ -547,7 +586,8 @@ export function TitleBar() {
           <Plus size={15} strokeWidth={2} aria-hidden />
         </button>
 
-        {/* right: quick actions + window controls */}
+        {/* right: quick actions + window controls (real controls in the
+            desktop app; nothing decorative is rendered on the web) */}
         <div className="ml-auto flex items-center gap-0.5">
           <button
             type="button"
@@ -563,33 +603,7 @@ export function TitleBar() {
 
           <div className="mx-1 h-4 w-px bg-[#3E3E3E]" aria-hidden />
 
-          <button
-            type="button"
-            className="iris-icon-btn h-7! w-8!"
-            aria-label="Minimize (preview)"
-            title="Minimize"
-            onClick={() => actions.toast('Window controls are decorative in the web preview')}
-          >
-            <Minus size={13} strokeWidth={2} aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="iris-icon-btn h-7! w-8!"
-            aria-label="Toggle fullscreen"
-            title="Fullscreen"
-            onClick={toggleFullscreen}
-          >
-            <Square size={12} strokeWidth={2} aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="flex h-7 w-8 items-center justify-center rounded-md text-[#9A9A9A] transition-colors hover:bg-[#F24822] hover:text-white"
-            aria-label="Close file — back to files"
-            title="Close"
-            onClick={() => actions.goHome()}
-          >
-            <X size={14} strokeWidth={2} aria-hidden />
-          </button>
+          <WindowControls />
         </div>
       </div>
     </header>

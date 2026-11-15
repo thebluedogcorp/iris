@@ -33,11 +33,15 @@ import { CommentLayer } from './CommentLayer';
 import { PresentationView } from './PresentationView';
 import { ShareDialog } from './ShareDialog';
 import { HelpButton } from './HelpButton';
+import { useDesktopWiring } from '../desktop/useDesktopWiring';
 
 export default function IrisApp() {
   const route = useIris((s) => s.route);
   const toasts = useIris((s) => s.toasts);
   const presenting = useIris((s) => s.presenting);
+
+  /* desktop app integration (drag regions + auto-update toasts); inert on the web */
+  useDesktopWiring();
 
   /* browser Back / Forward adopt the URL route */
   useEffect(() => {

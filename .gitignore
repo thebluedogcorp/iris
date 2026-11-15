@@ -1,3 +1,25 @@
-skills/
+# dependencies
 node_modules/
+skills/
+
+# build output
+.next/
+out/
+tsconfig.tsbuildinfo
+
+# local runtime artifacts
 upload/
+db/
+dev.log
+server.log
+*.log
+
+# agent tooling
+agent-ctx/
+tool-results/
+
+# desktop app
+desktop/node_modules/
+desktop/dist/
+desktop/app-web/
+desktop/release/

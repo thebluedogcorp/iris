@@ -6,18 +6,18 @@
 
 **The open-source, local-first design studio.**
 
-Iris is a free, Figma-style vector design tool that runs entirely in your
-browser. No accounts. No uploads. No tracking. Your designs live on your
-machine — where they belong.
+Iris is a free, Figma-style vector design tool that runs entirely on your
+machine — in the browser or as a native Windows desktop app. No accounts.
+No uploads. No tracking. Your designs live where they belong.
 
-[Website](#) · [Features](#-features) · [Getting started](#-getting-started) · [Roadmap](#-roadmap) · [Contributing](#-contributing)
+[Download](#-desktop-app) · [Features](#-features) · [Getting started](#-getting-started) · [Roadmap](#-roadmap) · [Contributing](#-contributing)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-8B5CF6.svg)](./LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js%2016-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-93A89B.svg)](./CONTRIBUTING.md)
 
-<img src="docs/screenshots/landing.png" width="880" alt="The Iris marketing site — “Design that blooms.” hero with a studio preview and handmade paper-flower photography" />
+<img src="docs/screenshots/studio.png" width="880" alt="The Iris studio — dark editor UI with layers, canvas, properties panel and the floating toolbar" />
 
 </div>
 
@@ -33,16 +33,15 @@ under MIT.
 
 | | Iris v1 |
 |---|---|
-| **Your files** | Stay in your browser / on your disk — never uploaded |
-| **Accounts** | None required (a preview account flow exists; see below) |
-| **Offline** | Fully functional — it is a local app that happens to ship in a tab |
+| **Your files** | Stay on your device — never uploaded |
+| **Accounts** | None. The studio opens straight into your files |
+| **Offline** | Fully functional — the desktop app is 100% offline |
+| **Updates** | Automatic, in the background (GitHub Releases) |
 | **Price** | Free forever, MIT-licensed |
 
 ## Screenshots
 
-| The studio | The account flow (preview) |
-|---|---|
-| <img src="docs/screenshots/studio.png" width="440" alt="The Iris editor — dark UI with layers, canvas, properties panel and a small brand-poster design" /> | <img src="docs/screenshots/account.png" width="440" alt="Iris account creation — split screen with paper-flower photography and the sign-up form" /> |
+<img src="docs/screenshots/studio.png" width="880" alt="The Iris editor — dark UI with layers, canvas, properties panel and a small brand-poster design" />
 
 ## ✨ Features
 
@@ -155,17 +154,18 @@ Every Iris file is a single self-describing JSON document:
 ## 🔒 Privacy
 
 Iris collects nothing. There are no analytics, no telemetry, no error
-reporting, no cookies. Documents autosave to your browser's `localStorage`
-and to `.iris` files you choose to save. In this preview the account flow is
-simulated on-device (see below) — nothing is ever transmitted.
+reporting, no cookies. Documents autosave to your device's local storage
+and to `.iris` files you choose to save — nothing is ever transmitted. The
+only network the desktop app ever touches is GitHub Releases, to look for
+software updates.
 
 ## 🏗️ Architecture
 
 ```
 src/
   app/                     # Next.js 16 App Router shell (single "/" route)
-    page.tsx               #   → dynamic import of the client gate (ssr: false)
-    layout.tsx             #   fonts (Geist + Fraunces) + metadata
+    page.tsx               #   → dynamic import of the studio (ssr: false)
+    layout.tsx             #   fonts (Geist) + metadata
   iris/
     engine/                # framework-agnostic core (zero React imports)
       model.ts             # Document -> Pages -> Nodes (Frame, Group, Rect,
@@ -184,30 +184,66 @@ src/
       library.ts           # local document library + thumbnails
       router.ts            # client-side routing: / <-> /?doc=<id>
     ui/                    # React shell
-      AppGate.tsx          # phase flow: landing → account → studio
+      IrisApp.tsx          # studio shell (file browser ↔ editor)
       HomeBrowser.tsx      # file browser (search, sort, grid/list, recents)
-      TitleBar.tsx         # menus, document name, Local-first badge
+      TitleBar.tsx         # menus, document tab, window controls
       CanvasView.tsx       # canvas element + pointer wiring
-      Toolbar.tsx          # floating tool switcher
-      LayersPanel.tsx      # pages + layers tree
+      Toolbar.tsx          # floating tool switcher (grouped tools)
+      LeftPanel.tsx        # pages + layers tree + styles
       PropertiesPanel.tsx  # design properties (position/fill/stroke/text)
-      StatusBar.tsx        # doc state, hints, zoom
       ContextMenu.tsx      # right-click actions
       ExportDialog.tsx     # PNG/SVG export options
       ShortcutsOverlay.tsx # "?" cheat-sheet
-    marketing/             # the website (landing page)
-      LandingPage.tsx      # hero, how-it-works, features, craft gallery, CTA
-      brand.ts             # palette, imagery, links
-    auth/
-      session.ts           # PREVIEW account simulation (localStorage)
-      AuthPage.tsx         # sign-up / sign-in screen (preview)
+    desktop/               # integration with the Electron shell (optional host)
+      bridge.ts            # typed window.irisDesktop surface (absent on web)
+      WindowControls.tsx   # native min/max/close for the frameless window
+      useDesktopWiring.ts  # drag-region CSS hook + auto-update toasts
+
+desktop/                   # Iris for Windows — Electron wrapper
+  src/main.ts              # app:// scheme server, frameless window, auto-updater
+  src/preload.ts           # contextBridge → window.irisDesktop
+  scripts/package.mjs      # export web → compile → electron-builder (NSIS)
+  scripts/edit-exe.cjs     # resedit exe patching (icon + version, wine-free)
+  electron-builder.yml     # NSIS target, GitHub Releases publishing
+  build/                   # generated icon set (bun run make:icon)
 ```
 
-The engine can be dropped into any host — the file layer (`files.ts`) is the
-seam where Electron IPC (`window.irisAPI` via `contextBridge`) replaces the
-browser download/upload shim in the planned desktop build.
+The engine is host-agnostic: the same studio bundle runs on the web and
+inside the desktop shell. In the desktop app the static export is served
+through a private `app://` scheme (no localhost server, no firewall
+prompts) and the preload bridge supplies native window controls and
+auto-update plumbing.
 
-## 🚀 Getting started
+## 🖥 Desktop app
+
+**Windows:** grab `Iris-Setup-x.y.z.exe` from
+[GitHub Releases](https://github.com/thebluedogcorp/iris/releases) — an
+assisted NSIS installer (per-user, no admin required, uninstaller included).
+
+- **Offline-first** — the whole studio is bundled; nothing is fetched at runtime.
+- **Auto-updates** — Iris checks GitHub Releases in the background (at
+  launch, then every 4 h), downloads silently and offers a one-click
+  *Restart to update* (Help → *Check for Updates…* works too). Deltas are
+  served via blockmaps.
+- **Native chrome** — frameless window with the studio's own title bar,
+  draggable, double-click to maximize, window state remembered between
+  launches, F12 for DevTools.
+
+Build it yourself (works on Linux, macOS and Windows — no Wine needed):
+
+```bash
+bun install            # root: web deps
+make:icon              # regenerate desktop/build icons (optional)
+cd desktop
+bun install            # electron-builder toolchain
+bun run dist           # → desktop/release/Iris-Setup-<version>.exe
+```
+
+Releasing: push a `v*` tag — CI (`.github/workflows/desktop-release.yml`)
+builds on `windows-latest` and publishes the installer to GitHub Releases;
+existing installs auto-update to it.
+
+## 🚀 Getting started (web)
 
 ```bash
 git clone https://github.com/thebluedogcorp/iris.git
@@ -220,7 +256,6 @@ Other handy scripts:
 
 ```bash
 bun run lint         # ESLint (Next.js core-web-vitals + TS rules)
-bun run db:generate  # regenerate the Prisma client (schema is minimal today)
 ```
 
 > **Node/Bun**: developed and tested with Bun 1.2+ and Node 20+.
@@ -228,15 +263,15 @@ bun run db:generate  # regenerate the Prisma client (schema is minimal today)
 ## 🗺️ Roadmap
 
 - ✅ **v1.0 — the local studio** (this release): full editor, `.iris` files,
-  home browser, marketing site
+  home browser
+- ✅ **v1.0 — Iris for Windows**: Electron desktop app with assisted installer,
+  auto-updates and native window chrome
 - 🔜 **v1.1** — multi-fill/stroke, gradients, effects; boolean operations;
   components & instances; auto layout & constraints
-- 🔜 **v1.2** — prototyping; plugin API; Electron desktop packaging
-  (`src/main` + `src/preload`)
-- 🌤️ **Iris Cloud (optional)** — Google sign-in via NextAuth.js (the preview
-  account flow already mirrors the final UX), encrypted sync & backup,
-  link sharing, real-time collaboration. Always opt-in: the local studio
-  stays fully functional without it.
+- 🔜 **v1.2** — prototyping; plugin API; macOS + Linux desktop builds
+- 🌤️ **Iris Cloud (optional)** — Google sign-in via NextAuth.js, encrypted
+  sync & backup, link sharing, real-time collaboration. Always opt-in: the
+  local studio stays fully functional without it.
 
 ## 🤝 Contributing
 
@@ -258,7 +293,5 @@ Figma, Inc.
 
 ## 🌸 Acknowledgments
 
-- The paper-flower photography on the website comes from independent craft
-  studios around the web — used with appreciation, made with crepe paper.
 - Built by [The Blue Dog](https://github.com/thebluedogcorp) — *crafted with
   paper petals & pixels.*

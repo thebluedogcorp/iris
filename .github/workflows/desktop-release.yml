@@ -1,0 +1,58 @@
+name: Desktop Release
+
+# Builds the Iris Windows installer and publishes it to GitHub Releases.
+# Every push of a v* tag ships a release; existing installs pick it up
+# automatically through the built-in auto-updater (electron-updater reads
+# latest.yml from the release assets).
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & publish Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install web dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        env:
+          # only the packaging toolchain is needed — no display to run Electron
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: bun install
+
+      - name: Regenerate icon set
+        run: bun run make:icon
+
+      - name: Build, package and publish
+        working-directory: desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun run dist:publish
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iris-windows-installer
+          path: |
+            desktop/release/Iris-Setup-*.exe
+            desktop/release/latest.yml
+          if-no-files-found: error
