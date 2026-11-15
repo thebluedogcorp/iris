@@ -21,6 +21,7 @@ directories:
 files:
   - dist/**
   - app-web/**
+  - build/icons/256x256.png
   - package.json
   - "!**/*.map"
 

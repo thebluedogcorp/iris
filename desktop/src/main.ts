@@ -219,6 +219,25 @@ function createWindow(): void {
     mainWindow?.show();
   });
 
+  /*
+   * Safety net: if the renderer ever stalls before `ready-to-show` (e.g. a
+   * blocking preload or a failed load), show the window anyway after 8s so
+   * the app never sits invisible in the taskbar with no window.
+   */
+  const showFallback = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+  }, 8_000);
+  mainWindow.once('closed', () => clearTimeout(showFallback));
+
+  mainWindow.webContents.on('did-fail-load', (_event, code, desc, url) => {
+    console.error(`[iris] failed to load ${url} — ${code} ${desc}`);
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+  });
+
   /* keep the renderer's window controls in sync */
   const sendMaximize = (maximized: boolean): void => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -277,7 +296,16 @@ function registerIpc(): void {
   });
   ipcMain.on('win:close', () => mainWindow?.close());
   ipcMain.handle('win:is-maximized', () => mainWindow?.isMaximized() ?? false);
-  ipcMain.handle('app:get-version', () => app.getVersion());
+  /*
+   * NOTE: the preload fetches the version with `ipcRenderer.sendSync` (it must
+   * be available synchronously on `window.irisDesktop`). A sendSync needs a
+   * matching `ipcMain.on` that sets `event.returnValue` — `ipcMain.handle`
+   * serves `invoke()` only and never replies to sendSync, which would freeze
+   * the renderer forever on startup (the window would never appear).
+   */
+  ipcMain.on('app:get-version', (event) => {
+    event.returnValue = app.getVersion();
+  });
 }
 
 /* ------------------------------------------------------------------ */
