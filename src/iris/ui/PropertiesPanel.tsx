@@ -21,14 +21,20 @@ import {
   AlignEndHorizontal,
   AlignEndVertical,
   AlignHorizontalDistributeCenter,
+  AlignHorizontalSpaceAround,
   AlignLeft,
   AlignCenter,
   AlignRight,
   AlignStartHorizontal,
   AlignStartVertical,
   AlignVerticalDistributeCenter,
+  AlignVerticalSpaceAround,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
+  WrapText,
+  X,
+  Check,
   ArrowDownToLine,
   ArrowUpToLine,
   FlipHorizontal,
@@ -54,7 +60,9 @@ import {
   FRAME_PRESETS,
   NODE_TYPE_LABEL,
   type ArrowHead,
+  type AxisSizing,
   type DashStyle,
+  type IrisNode,
   type NodeType,
   type TextCase,
 } from '../engine/model';
@@ -258,6 +266,279 @@ function IconBtn({
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Auto layout                                                         */
+/* ------------------------------------------------------------------ */
+
+/** Fixed / Hug / Fill dropdown attached to a W or H field. */
+function SizingMenu({
+  mode,
+  options,
+  onChange,
+  label,
+}: {
+  mode: AxisSizing;
+  options: AxisSizing[];
+  onChange: (m: AxisSizing) => void;
+  label: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent): void => {
+      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [open]);
+  const LABEL: Record<AxisSizing, string> = {
+    fixed: 'Fixed',
+    hug: 'Hug contents',
+    fill: 'Fill container',
+  };
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        className="flex h-[26px] w-5 items-center justify-center rounded-md text-[#8B8B8B] transition-colors hover:bg-[#383838] hover:text-white"
+        aria-label={`${label} sizing: ${LABEL[mode]}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={`${label} sizing — ${LABEL[mode]}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <ChevronDown size={10} strokeWidth={2.25} aria-hidden />
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          aria-label={`${label} sizing`}
+          className="absolute right-0 top-full z-50 mt-1 w-[150px] rounded-lg border border-[#4E4E4E] bg-[#1E1E1E] py-1 shadow-2xl"
+          style={{ animation: 'iris-menu-in 90ms ease-out' }}
+        >
+          {options.map((o) => (
+            <button
+              key={o}
+              type="button"
+              role="menuitemradio"
+              aria-checked={o === mode}
+              className={`mx-1 flex h-8 w-[calc(100%-8px)] items-center gap-2 rounded-md px-2 text-left text-[12px] transition-colors ${
+                o === mode ? 'text-white' : 'text-[#E5E5E5] hover:bg-[#3A3A3A]'
+              }`}
+              onClick={() => {
+                onChange(o);
+                setOpen(false);
+              }}
+            >
+              <span className="flex w-3.5 shrink-0 justify-center" aria-hidden>
+                {o === mode ? <Check size={12} strokeWidth={2.5} /> : null}
+              </span>
+              {LABEL[o]}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Auto layout section: direction, gap, padding, align/justify, wrap. */
+function AutoLayoutSection({ node }: { node: IrisNode }) {
+  const updateAutoLayout = useIris((s) => s.updateAutoLayout);
+  const removeAutoLayout = useIris((s) => s.removeAutoLayout);
+  const L = node.layout;
+  if (!L) return null;
+  const horiz = L.mode === 'horizontal';
+  const pad = L.padding;
+
+  const justifyIcons = horiz
+    ? [AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal, AlignHorizontalSpaceAround]
+    : [AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignVerticalSpaceAround];
+  const justifyLabels = horiz
+    ? ['Pack start', 'Pack center', 'Pack end', 'Space between']
+    : ['Pack top', 'Pack center', 'Pack bottom', 'Space between'];
+  const alignIcons = horiz
+    ? [AlignStartVertical, AlignCenterVertical, AlignEndVertical]
+    : [AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal];
+  const alignLabels = horiz
+    ? ['Align top', 'Align middle', 'Align bottom']
+    : ['Align left', 'Align center', 'Align right'];
+  const justifyValues: AutoLayoutJustify[] = ['start', 'center', 'end', 'space-between'];
+  const alignValues: AutoLayoutAlign[] = ['start', 'center', 'end'];
+
+  return (
+    <Section
+      title="Auto layout"
+      action={
+        <IconBtn label="Remove auto layout — Alt+Shift+A" Icon={X} onClick={removeAutoLayout} />
+      }
+    >
+      <div className="flex flex-col gap-2.5">
+        {/* direction */}
+        <div className="flex items-center gap-1.5">
+          <div className="flex flex-1 rounded-md bg-[#1E1E1E]" role="group" aria-label="Direction">
+            <button
+              type="button"
+              className={cn(
+                'flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md text-[11px] transition-colors',
+                !horiz ? 'bg-[#474747] text-white' : 'text-[#C9C9C9] hover:bg-[#383838] hover:text-white',
+              )}
+              aria-pressed={!horiz}
+              onClick={() => updateAutoLayout(node.id, { mode: 'vertical' })}
+            >
+              <ArrowDown size={13} strokeWidth={2} aria-hidden /> Vertical
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'ml-px flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md text-[11px] transition-colors',
+                horiz ? 'bg-[#474747] text-white' : 'text-[#C9C9C9] hover:bg-[#383838] hover:text-white',
+              )}
+              aria-pressed={horiz}
+              onClick={() => updateAutoLayout(node.id, { mode: 'horizontal' })}
+            >
+              <ArrowRight size={13} strokeWidth={2} aria-hidden /> Horizontal
+            </button>
+          </div>
+          <IconBtn
+            label="Wrap children"
+            Icon={WrapText}
+            active={L.wrap}
+            disabled={!horiz}
+            onClick={() => updateAutoLayout(node.id, { wrap: !L.wrap })}
+          />
+        </div>
+
+        {/* gap */}
+        <div className={L.wrap && horiz ? 'grid grid-cols-2 gap-1.5' : ''}>
+          <div>
+            <RowLabel>{L.wrap && horiz ? 'Gap' : 'Gap'}</RowLabel>
+            <NumberField
+              value={L.gap}
+              min={0}
+              max={200}
+              icon={<span className="text-[10px] font-semibold">⇔</span>}
+              ariaLabel="Gap between children"
+              onChange={(v) => updateAutoLayout(node.id, { gap: Math.max(0, v) })}
+            />
+          </div>
+          {L.wrap && horiz ? (
+            <div>
+              <RowLabel>Row gap</RowLabel>
+              <NumberField
+                value={L.wrapGap}
+                min={0}
+                max={200}
+                icon={<span className="text-[10px] font-semibold">⇕</span>}
+                ariaLabel="Gap between wrapped rows"
+                onChange={(v) => updateAutoLayout(node.id, { wrapGap: Math.max(0, v) })}
+              />
+            </div>
+          ) : null}
+        </div>
+
+        {/* padding */}
+        <div>
+          <RowLabel>Padding</RowLabel>
+          <div className="grid grid-cols-2 gap-1.5">
+            <NumberField
+              value={pad.top}
+              min={0}
+              icon={<span className="text-[10px] font-semibold">T</span>}
+              ariaLabel="Padding top"
+              onChange={(v) => updateAutoLayout(node.id, { padding: { top: Math.max(0, v) } })}
+            />
+            <NumberField
+              value={pad.right}
+              min={0}
+              icon={<span className="text-[10px] font-semibold">R</span>}
+              ariaLabel="Padding right"
+              onChange={(v) => updateAutoLayout(node.id, { padding: { right: Math.max(0, v) } })}
+            />
+            <NumberField
+              value={pad.bottom}
+              min={0}
+              icon={<span className="text-[10px] font-semibold">B</span>}
+              ariaLabel="Padding bottom"
+              onChange={(v) => updateAutoLayout(node.id, { padding: { bottom: Math.max(0, v) } })}
+            />
+            <NumberField
+              value={pad.left}
+              min={0}
+              icon={<span className="text-[10px] font-semibold">L</span>}
+              ariaLabel="Padding left"
+              onChange={(v) => updateAutoLayout(node.id, { padding: { left: Math.max(0, v) } })}
+            />
+          </div>
+        </div>
+
+        {/* align (counter axis) + justify (main axis) */}
+        <div>
+          <RowLabel>{horiz ? 'Align vertical' : 'Align horizontal'}</RowLabel>
+          <div className="flex rounded-md bg-[#1E1E1E]" role="group" aria-label="Counter-axis alignment">
+            {alignValues.map((v, i) => (
+              <button
+                key={v}
+                type="button"
+                className={cn(
+                  'flex h-7 flex-1 items-center justify-center text-[#C9C9C9] transition-colors hover:bg-[#383838] hover:text-white',
+                  i > 0 && 'border-l border-[#2A2A2A]',
+                  L.align === v && 'bg-[#474747] text-white',
+                )}
+                title={alignLabels[i]}
+                aria-label={alignLabels[i]}
+                aria-pressed={L.align === v}
+                onClick={() => updateAutoLayout(node.id, { align: v })}
+              >
+                {(() => {
+                  const Icon = alignIcons[i];
+                  return <Icon size={13} strokeWidth={1.75} aria-hidden />;
+                })()}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <RowLabel>{horiz ? 'Justify horizontal' : 'Justify vertical'}</RowLabel>
+          <div className="flex rounded-md bg-[#1E1E1E]" role="group" aria-label="Main-axis distribution">
+            {justifyValues.map((v, i) => (
+              <button
+                key={v}
+                type="button"
+                className={cn(
+                  'flex h-7 flex-1 items-center justify-center text-[#C9C9C9] transition-colors hover:bg-[#383838] hover:text-white',
+                  i > 0 && 'border-l border-[#2A2A2A]',
+                  L.justify === v && 'bg-[#474747] text-white',
+                )}
+                title={justifyLabels[i]}
+                aria-label={justifyLabels[i]}
+                aria-pressed={L.justify === v}
+                onClick={() => updateAutoLayout(node.id, { justify: v })}
+              >
+                {(() => {
+                  const Icon = justifyIcons[i];
+                  return <Icon size={13} strokeWidth={1.75} aria-hidden />;
+                })()}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+type AutoLayoutJustify = 'start' | 'center' | 'end' | 'space-between';
+type AutoLayoutAlign = 'start' | 'center' | 'end';
+
 function DesignTab() {
   const doc = useIris((s) => s.doc);
   const currentPageId = useIris((s) => s.currentPageId);
@@ -283,6 +564,9 @@ function DesignTab() {
       setSettings: s.setSettings,
       clearGuides: s.clearGuides,
       unlockAllOnPage: s.unlockAllOnPage,
+      addAutoLayout: s.addAutoLayout,
+      removeAutoLayout: s.removeAutoLayout,
+      updateSizing: s.updateSizing,
     })),
   );
 
@@ -294,6 +578,27 @@ function DesignTab() {
   const bbox = selection.length > 0 ? boundsOfNodes(doc, selection) : null;
   const settings = doc.settings;
   const allVisible = nodes.every((n) => n.visible);
+
+  /* auto-layout context */
+  const layoutParent = single?.parentId ? doc.nodesById[single.parentId] : undefined;
+  const inLayoutPanel = !!layoutParent?.layout;
+  const isLayoutFrame = !!single?.layout;
+  const showSizingMenus = !!(single && (isLayoutFrame || inLayoutPanel));
+  /** effective horizontal sizing (text autoWidth behaves as hug) */
+  const effSizingH: AxisSizing =
+    single?.type === 'text' && single.autoWidth ? 'hug' : (single?.sizingH ?? 'fixed');
+  const wOptions: AxisSizing[] = isLayoutFrame
+    ? inLayoutPanel
+      ? ['fixed', 'hug', 'fill']
+      : ['fixed', 'hug']
+    : single?.type === 'text'
+      ? ['fixed', 'fill', 'hug']
+      : ['fixed', 'fill'];
+  const hOptions: AxisSizing[] = isLayoutFrame
+    ? inLayoutPanel
+      ? ['fixed', 'hug', 'fill']
+      : ['fixed', 'hug']
+    : ['fixed', 'fill'];
 
   const FILLABLE = ['rect', 'ellipse', 'frame', 'path', 'text', 'polygon', 'star'];
   const STROKABLE = ['rect', 'ellipse', 'line', 'path', 'frame', 'polygon', 'star', 'arrow'];
@@ -443,6 +748,9 @@ function DesignTab() {
       </div>
 
       <div className="iris-scroll flex-1 overflow-y-auto">
+        {/* 0 · Auto layout (layout frames only) */}
+        {single?.layout ? <AutoLayoutSection node={single} /> : null}
+
         {/* 1 · Position: alignment, X/Y, rotation, z-order */}
         <Section title="Position">
           <div className="flex flex-col gap-2.5">
@@ -495,6 +803,8 @@ function DesignTab() {
                     value={single.x}
                     icon={<span className="text-[10px] font-semibold">X</span>}
                     ariaLabel="X position"
+                    disabled={inLayoutPanel}
+                    title={inLayoutPanel ? 'Position is controlled by auto layout' : undefined}
                     onChange={(v) => actions.updateNodes([single.id], { x: v }, { history: 'x' })}
                   />
                 ) : (
@@ -510,6 +820,8 @@ function DesignTab() {
                     value={single.y}
                     icon={<span className="text-[10px] font-semibold">Y</span>}
                     ariaLabel="Y position"
+                    disabled={inLayoutPanel}
+                    title={inLayoutPanel ? 'Position is controlled by auto layout' : undefined}
                     onChange={(v) => actions.updateNodes([single.id], { y: v }, { history: 'y' })}
                   />
                 ) : (
@@ -584,6 +896,12 @@ function DesignTab() {
 
         {/* 2 · Layout: dimensions (+ proportional lock), frame clip */}
         <Section title="Layout">
+          {single && (single.type === 'frame' || single.type === 'group') && !single.layout ? (
+            <div className="mb-2.5 flex items-center justify-between">
+              <span className="text-[11px] text-[#E5E5E5]">Auto layout</span>
+              <IconBtn label="Add auto layout — Shift+A" Icon={Plus} onClick={actions.addAutoLayout} />
+            </div>
+          ) : null}
           <div>
             <RowLabel>Dimensions</RowLabel>
             <div className="flex items-center gap-1.5">
@@ -593,13 +911,27 @@ function DesignTab() {
                   min={0}
                   icon={<span className="text-[10px] font-semibold">W</span>}
                   ariaLabel="Width"
-                  disabled={single.type === 'text' && single.autoWidth}
+                  disabled={
+                    (single.type === 'text' && single.autoWidth) ||
+                    single.sizingH === 'fill' ||
+                    (isLayoutFrame && single.sizingH === 'hug')
+                  }
+                  title={
+                    single.sizingH === 'fill'
+                      ? 'Width fills the container'
+                      : isLayoutFrame && single.sizingH === 'hug'
+                        ? 'Width hugs the content'
+                        : undefined
+                  }
                   onChange={(v) => {
                     const w = Math.max(1, v);
                     const h =
                       proportional && single.type !== 'text' && single.w !== 0
                         ? Math.max(1, Math.round((w * single.h) / single.w))
                         : single.h;
+                    if (single.sizingH === 'fill' || single.sizingH === 'hug') {
+                      actions.updateNodes([single.id], { sizingH: 'fixed' }, { history: 'sizing' });
+                    }
                     actions.setNodeRect(single.id, { x: single.x, y: single.y, w, h }, { history: 'wh' });
                   }}
                 />
@@ -620,20 +952,43 @@ function DesignTab() {
                   }}
                 />
               )}
+              {showSizingMenus && single ? (
+                <SizingMenu
+                  mode={effSizingH}
+                  options={wOptions}
+                  label="Width"
+                  onChange={(m) => actions.updateSizing([single.id], 'h', m)}
+                />
+              ) : null}
               {single ? (
                 <NumberField
                   value={single.h}
                   min={0}
                   icon={<span className="text-[10px] font-semibold">H</span>}
                   ariaLabel="Height"
-                  disabled={single.type === 'text'}
-                  title={single.type === 'text' ? 'Text height is automatic' : undefined}
+                  disabled={
+                    single.type === 'text' ||
+                    single.sizingV === 'fill' ||
+                    (isLayoutFrame && single.sizingV === 'hug')
+                  }
+                  title={
+                    single.type === 'text'
+                      ? 'Text height is automatic'
+                      : single.sizingV === 'fill'
+                        ? 'Height fills the container'
+                        : isLayoutFrame && single.sizingV === 'hug'
+                          ? 'Height hugs the content'
+                          : undefined
+                  }
                   onChange={(v) => {
                     const h = Math.max(1, v);
                     const w =
                       proportional && single.h !== 0
                         ? Math.max(1, Math.round((h * single.w) / single.h))
                         : single.w;
+                    if (single.sizingV === 'fill' || single.sizingV === 'hug') {
+                      actions.updateNodes([single.id], { sizingV: 'fixed' }, { history: 'sizing' });
+                    }
                     actions.setNodeRect(single.id, { x: single.x, y: single.y, w, h }, { history: 'wh' });
                   }}
                 />
@@ -654,6 +1009,14 @@ function DesignTab() {
                   }}
                 />
               )}
+              {showSizingMenus && single ? (
+                <SizingMenu
+                  mode={single.sizingV}
+                  options={hOptions}
+                  label="Height"
+                  onChange={(m) => actions.updateSizing([single.id], 'v', m)}
+                />
+              ) : null}
               <button
                 type="button"
                 className={cn(

@@ -100,6 +100,22 @@ const GROUPS: ShortcutGroup[] = [
     ],
   },
   {
+    title: 'Auto layout',
+    rows: [
+      { keys: ['Shift+A'], label: 'Add auto layout' },
+      { keys: ['Alt+Shift+A'], label: 'Remove auto layout' },
+      { keys: ['Drag child'], label: 'Reorder within layout' },
+      { keys: ['Arrows'], label: 'Move child one slot' },
+      { keys: ['Drag out of frame'], label: 'Remove from layout' },
+    ],
+  },
+  {
+    title: 'Actions',
+    rows: [
+      { keys: ['Ctrl+K'], label: 'Search tools & commands' },
+    ],
+  },
+  {
     title: 'Files',
     rows: [
       { keys: ['Ctrl+S'], label: 'Save .iris' },

@@ -50,6 +50,8 @@ type Interaction =
       moved: boolean;
       ownsHistory: boolean;
       startNodes: { id: ID; x: number; y: number; parentId: ID | null }[];
+      /** auto-layout reorder drag (children of one layout frame) */
+      layoutDrag?: { frameId: ID; ids: ID[]; index: number; left: boolean };
     }
   | {
       kind: 'resize';
@@ -449,6 +451,86 @@ function reparentOnDrop(startNodes: { id: ID; parentId: ID | null }[]): void {
 }
 
 /* ------------------------------------------------------------------ */
+/* auto-layout reorder drag                                            */
+/* ------------------------------------------------------------------ */
+
+type LayoutDragState = { frameId: ID; ids: ID[]; index: number; left: boolean };
+
+/** Live-update an auto-layout reorder drag: ghost follows the pointer,
+ *  insertion index is recomputed and the children order updated so siblings
+ *  re-flow around the target slot (Figma behavior). */
+function updateLayoutDrag(ld: LayoutDragState, world: Vec): void {
+  const s = S();
+  const frame = s.doc.nodesById[ld.frameId];
+  if (!frame || !frame.layout) return;
+  const horiz = frame.layout.mode === 'horizontal';
+
+  // 1. ghost: dragged nodes follow the pointer in frame-local space
+  const inv = mInvert(nodeWorldMatrix(s.doc, frame));
+  const local = mApplyVec(inv, world.x - (interaction as Extract<Interaction, { kind: 'move' }>).startWorld.x, world.y - (interaction as Extract<Interaction, { kind: 'move' }>).startWorld.y);
+  const updates: { id: ID; x: number; y: number }[] = [];
+  for (const start of (interaction as Extract<Interaction, { kind: 'move' }>).startNodes) {
+    updates.push({ id: start.id, x: start.x + local.x, y: start.y + local.y });
+  }
+  if (updates.length) {
+    s.updateNodes(
+      updates.map((u) => u.id),
+      (node) => {
+        const u = updates.find((x) => x.id === node.id)!;
+        return { x: u.x, y: u.y };
+      },
+      { history: false },
+    );
+  }
+
+  // 2. insertion index among the *other* children (main-axis midpoint rule)
+  const p = mApply(mInvert(nodeWorldMatrix(s.doc, frame)), world.x, world.y);
+  const others = frame.children.filter((c) => !ld.ids.includes(c));
+  let index = 0;
+  for (const cid of others) {
+    const c = s.doc.nodesById[cid];
+    if (!c) continue;
+    const center = horiz ? c.x + c.w / 2 : c.y + c.h / 2;
+    const pointer = horiz ? p.x : p.y;
+    if (center < pointer) index += 1;
+  }
+  if (index === ld.index) return; // nothing to do
+  ld.index = index;
+
+  // 3. reorder the children array and let the solver re-flow
+  const next = [...others.slice(0, index), ...ld.ids, ...others.slice(index)];
+  s.updateNodes([frame.id], { children: next }, { history: false });
+  overlay.layoutDrag = { frameId: frame.id, ids: ld.ids, index, left: false };
+}
+
+/** Arrow keys inside an auto-layout frame move the selection one slot.
+ *  Returns true when the selection was a contiguous block that got reordered. */
+function arrowReorderInLayout(dir: -1 | 1): boolean {
+  const s = S();
+  const sel = s.selection.map((id) => s.doc.nodesById[id]).filter(Boolean) as IrisNode[];
+  if (sel.length === 0) return false;
+  const parentId = sel[0].parentId;
+  if (!parentId || sel.some((n) => n.parentId !== parentId)) return false;
+  const frame = s.doc.nodesById[parentId];
+  if (!frame?.layout) return false;
+  const idxs = sel.map((n) => frame.children.indexOf(n.id)).sort((a, b) => a - b);
+  if (idxs.some((i) => i < 0)) return false;
+  for (let i = 1; i < idxs.length; i++) {
+    if (idxs[i] !== idxs[i - 1] + 1) return false; // not a contiguous block
+  }
+  const first = idxs[0];
+  const last = idxs[idxs.length - 1];
+  if (dir < 0 && first === 0) return true; // already at the start
+  if (dir > 0 && last === frame.children.length - 1) return true; // at the end
+  const children = [...frame.children];
+  const block = children.splice(first, sel.length);
+  const at = dir < 0 ? first - 1 : first + 1;
+  children.splice(at, 0, ...block);
+  s.updateNodes([frame.id], { children }, { history: 'auto-layout' });
+  return true;
+}
+
+/* ------------------------------------------------------------------ */
 /* eyedropper                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -794,6 +876,20 @@ function onPointerDown(e: PointerEvent): void {
           .filter(Boolean)
           .map((n) => ({ id: n.id, x: n.x, y: n.y, parentId: n.parentId })),
       };
+      const altParent = interaction.startNodes[0]?.parentId ?? null;
+      if (
+        altParent &&
+        interaction.startNodes.length > 0 &&
+        interaction.startNodes.every((n) => n.parentId === altParent) &&
+        S().doc.nodesById[altParent]?.layout
+      ) {
+        interaction.layoutDrag = {
+          frameId: altParent,
+          ids: interaction.startNodes.map((n) => n.id),
+          index: -1,
+          left: false,
+        };
+      }
       return;
     }
     s.historyBegin();
@@ -807,6 +903,23 @@ function onPointerDown(e: PointerEvent): void {
         .filter(Boolean)
         .map((n) => ({ id: n.id, x: n.x, y: n.y, parentId: n.parentId })),
     };
+    // auto-layout reorder drag: all selected roots live in one layout frame
+    const firstParentId = (interaction.startNodes[0]?.parentId ?? null) as ID | null;
+    if (
+      firstParentId &&
+      interaction.startNodes.length > 0 &&
+      interaction.startNodes.every((n) => n.parentId === firstParentId)
+    ) {
+      const pf = s.doc.nodesById[firstParentId];
+      if (pf?.layout) {
+        interaction.layoutDrag = {
+          frameId: pf.id,
+          ids: interaction.startNodes.map((n) => n.id),
+          index: -1,
+          left: false,
+        };
+      }
+    }
     return;
   }
 
@@ -827,6 +940,7 @@ function cancelInteraction(): void {
   interaction = { kind: 'none' };
   overlay.marquee = null;
   overlay.drawPreview = null;
+  overlay.layoutDrag = null;
   overlay.dragBadge = null;
   overlay.guides = [];
   overlay.guideDrag = null;
@@ -942,6 +1056,43 @@ function onPointerMove(e: PointerEvent): void {
       if (!interaction.moved) {
         if (Math.hypot(dx, dy) * s.viewport.zoom < 2.5) return;
         interaction.moved = true;
+        if (interaction.layoutDrag && !interaction.layoutDrag.left) {
+          overlay.layoutDrag = {
+            frameId: interaction.layoutDrag.frameId,
+            ids: interaction.layoutDrag.ids,
+            index: interaction.layoutDrag.index,
+            left: false,
+          };
+        }
+      }
+      // auto-layout reorder drag
+      if (interaction.layoutDrag && !interaction.layoutDrag.left) {
+        const frame = s.doc.nodesById[interaction.layoutDrag.frameId];
+        if (!frame || !frame.layout) {
+          interaction.layoutDrag = undefined;
+        } else {
+          const inv = mInvert(nodeWorldMatrix(s.doc, frame));
+          const p = mApply(inv, world.x, world.y);
+          const EDGE = 10;
+          const inside = p.x >= -EDGE && p.y >= -EDGE && p.x <= frame.w + EDGE && p.y <= frame.h + EDGE;
+          if (inside) {
+            updateLayoutDrag(interaction.layoutDrag, world);
+            requestDraw();
+            return;
+          }
+          // left the frame: release to the page and continue as a free move
+          interaction.layoutDrag.left = true;
+          overlay.layoutDrag = null;
+          s.reorderNodes(interaction.layoutDrag.ids, null, -1);
+          interaction.startWorld = world;
+          interaction.startNodes = interaction.startNodes
+            .map((sn) => sn.id)
+            .map((id) => s.doc.nodesById[id])
+            .filter(Boolean)
+            .map((n) => ({ id: n.id, x: n.x, y: n.y, parentId: n.parentId }));
+          requestDraw();
+          return;
+        }
       }
       if (e.shiftKey) {
         if (Math.abs(dx) > Math.abs(dy)) dy = 0;
@@ -1195,6 +1346,18 @@ function onPointerUp(e: PointerEvent): void {
       return;
     }
     case 'move': {
+      const ld = interaction.layoutDrag;
+      overlay.layoutDrag = null;
+      if (ld && !ld.left && interaction.moved) {
+        // reorder drag finished inside the frame: run a no-op commit so the
+        // solver snaps the dragged nodes into their new slots
+        s.updateNodes([], {}, { history: false });
+        if (interaction.ownsHistory) s.historyCommit();
+        overlay.guides = [];
+        interaction = { kind: 'none' };
+        requestDraw();
+        return;
+      }
       if (interaction.moved) {
         reparentOnDrop(interaction.startNodes);
       }
@@ -1318,6 +1481,21 @@ function applyResize(ia: Extract<Interaction, { kind: 'resize' }>, world: Vec, s
     const h = ia.handle;
     const fx = h.includes('e') ? 1 : h.includes('w') ? -1 : 0;
     const fy = h.includes('s') ? 1 : h.includes('n') ? -1 : 0;
+    // auto-layout: resizing a fill child converts it to fixed on that axis;
+    // resizing a hug frame converts the hug to fixed (Figma behavior)
+    {
+      const parent = n0.parentId ? s.doc.nodesById[n0.parentId] : undefined;
+      const conv: Partial<IrisNode> = {};
+      if (parent?.layout) {
+        if (fx !== 0 && n0.sizingH === 'fill') conv.sizingH = 'fixed';
+        if (fy !== 0 && n0.sizingV === 'fill') conv.sizingV = 'fixed';
+      }
+      if (n0.layout) {
+        if (fx !== 0 && n0.sizingH === 'hug') conv.sizingH = 'fixed';
+        if (fy !== 0 && n0.sizingV === 'hug') conv.sizingV = 'fixed';
+      }
+      if (Object.keys(conv).length) s.updateNodes([n0.id], conv, { history: false });
+    }
     let newW: number;
     let newH: number;
     if (alt) {
@@ -1600,7 +1778,7 @@ function onKeyDown(e: KeyboardEvent): void {
     if (e.key === 'Escape') (e.target as HTMLElement).blur();
     return;
   }
-  if (s.exportOpen || s.shortcutsOpen || s.presenting) return;
+  if (s.exportOpen || s.shortcutsOpen || s.presenting || s.paletteOpen) return;
   const mod = e.ctrlKey || e.metaKey;
 
   if (e.key === ' ') {
@@ -1669,6 +1847,9 @@ function onKeyDown(e: KeyboardEvent): void {
         if (e.shiftKey) {
           e.preventDefault();
           switchTool('image');
+        } else {
+          e.preventDefault();
+          s.setPaletteOpen(true);
         }
         return;
       case 'enter':
@@ -1729,6 +1910,14 @@ function onKeyDown(e: KeyboardEvent): void {
   // Shift+R → toggle rulers
   if (e.shiftKey && (e.key === 'R' || e.key === 'r')) {
     s.setViewFlag('rulers', !s.viewFlags.rulers);
+    return;
+  }
+
+  // Shift+A → add auto layout · Alt+Shift+A → remove auto layout
+  if (e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+    e.preventDefault();
+    if (e.altKey) s.removeAutoLayout();
+    else s.addAutoLayout();
     return;
   }
 
@@ -1859,6 +2048,18 @@ function onKeyDown(e: KeyboardEvent): void {
       const step = e.shiftKey ? 10 : 1;
       const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
       const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+      // children of an auto-layout frame: arrow keys reorder (Figma)
+      const parentId = s.doc.nodesById[s.selection[0]]?.parentId ?? null;
+      const pf = parentId ? s.doc.nodesById[parentId] : undefined;
+      if (
+        pf?.layout &&
+        s.selection.every((id) => s.doc.nodesById[id]?.parentId === parentId)
+      ) {
+        // reading order: Right/Down = forward, Left/Up = backward
+        const dir: -1 | 1 = dx + dy > 0 ? 1 : -1;
+        arrowReorderInLayout(dir);
+        return;
+      }
       s.moveSelectionWorld(dx, dy, 'nudge');
       return;
     }

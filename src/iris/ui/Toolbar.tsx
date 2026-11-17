@@ -33,9 +33,7 @@ import {
   MoveUpRight,
   Pencil,
   PenTool,
-  Presentation,
   Ruler,
-  Save,
   Scale,
   Slash,
   Square,
@@ -223,49 +221,7 @@ function ToolDropdown({
   );
 }
 
-/** A dropdown opened from the Actions ({}) button — quick utility actions. */
-function ActionsDropdown({ onClose }: { onClose: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useDropdownCloser(ref, onClose);
-  const setPresenting = useIris((s) => s.setPresenting);
-  const setExportOpen = useIris((s) => s.setExportOpen);
-  const setShortcutsOpen = useIris((s) => s.setShortcutsOpen);
-
-  const items: ToolOption[] = [
-    { label: 'Presentation', shortcut: 'Ctrl+Enter', Icon: Presentation, run: () => setPresenting(true) },
-    { label: 'Export…', shortcut: 'Ctrl+Shift+E', Icon: Save, run: () => setExportOpen(true) },
-    { label: 'Place image', shortcut: 'Ctrl+Shift+K', Icon: ImagePlus, run: () => void pickImageFiles() },
-    { label: 'Keyboard shortcuts', shortcut: '?', Icon: Braces, run: () => setShortcutsOpen(true) },
-  ];
-
-  return (
-    <div
-      ref={ref}
-      role="menu"
-      aria-label="Actions"
-      className="absolute bottom-full left-1/2 z-50 mb-2 w-[218px] -translate-x-1/2 rounded-lg border border-[#4E4E4E] bg-[#1E1E1E] py-1 shadow-2xl"
-      style={{ animation: 'iris-menu-in 90ms ease-out' }}
-    >
-      {items.map((it) => (
-        <button
-          key={it.label}
-          type="button"
-          role="menuitem"
-          onClick={() => {
-            it.run?.();
-            onClose();
-          }}
-          className="mx-1 flex h-8 w-[calc(100%-8px)] items-center gap-2.5 rounded-md px-2 text-left text-[12px] text-[#E5E5E5] transition-colors hover:bg-[#3A3A3A]"
-        >
-          <span className="w-3.5 shrink-0" aria-hidden />
-          <it.Icon size={14} strokeWidth={1.75} aria-hidden className="shrink-0 opacity-90" />
-          <span className="truncate">{it.label}</span>
-          {it.shortcut ? <span className="ml-auto pl-4 text-[11px] text-[#8B8B8B]">{it.shortcut}</span> : null}
-        </button>
-      ))}
-    </div>
-  );
-}
+/** The Actions ({}) button opens the searchable command palette (Ctrl+K). */
 
 /* ------------------------------------------------------------------ */
 /* toolbar                                                             */
@@ -280,6 +236,7 @@ export function Toolbar() {
   const setInspectMode = useIris((s) => s.setInspectMode);
 
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const setPaletteOpen = useIris((s) => s.setPaletteOpen);
 
   /* keep the per-group memory in sync when the tool changes from anywhere
    * (keyboard shortcuts, menus, canvas interactions) */
@@ -358,21 +315,18 @@ export function Toolbar() {
         );
       })}
 
-      {/* actions {} */}
+      {/* actions {} — opens the command palette (Ctrl+K) */}
       <div className="relative">
         <button
           type="button"
           className="group flex h-9 items-center gap-0.5 rounded-lg px-1.5 text-[#D0D0D0] transition-colors hover:bg-[#3A3A3A] hover:text-white"
-          aria-label="Actions"
+          aria-label="Actions (Ctrl+K)"
           aria-haspopup="menu"
-          aria-expanded={openGroup === 'actions'}
-          title="Actions"
-          onClick={() => setOpenGroup(openGroup === 'actions' ? null : 'actions')}
+          title="Actions — search tools and commands (Ctrl+K)"
+          onClick={() => setPaletteOpen(true)}
         >
           <Braces size={17} strokeWidth={1.75} aria-hidden />
-          <ChevronDown size={10} strokeWidth={2.25} aria-hidden className="text-[#8B8B8B] group-hover:text-[#C9C9C9]" />
         </button>
-        {openGroup === 'actions' ? <ActionsDropdown onClose={() => setOpenGroup(null)} /> : null}
       </div>
 
       {/* comment — no dropdown */}

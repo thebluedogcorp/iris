@@ -29,6 +29,57 @@ export type TextCase = 'as-typed' | 'upper' | 'lower' | 'title';
 export type DashStyle = 'solid' | 'dashed' | 'dotted';
 export type ArrowHead = 'none' | 'arrow' | 'triangle' | 'line';
 
+/** Auto Layout configuration on a frame (Figma Shift+A). */
+export interface AutoLayout {
+  /** flow direction of children along the main axis */
+  mode: 'vertical' | 'horizontal';
+  /** space between children along the main axis */
+  gap: number;
+  /** space between wrapped lines (wrap only) */
+  wrapGap: number;
+  /** inner spacing of the frame */
+  padding: { top: number; right: number; bottom: number; left: number };
+  /** main-axis distribution */
+  justify: 'start' | 'center' | 'end' | 'space-between';
+  /** counter-axis alignment */
+  align: 'start' | 'center' | 'end';
+  /** wrap children onto new lines (horizontal mode) */
+  wrap: boolean;
+}
+
+/** Per-axis sizing behavior (frames with layout, children of a layout parent). */
+export type AxisSizing = 'fixed' | 'hug' | 'fill';
+
+export const DEFAULT_AUTO_LAYOUT: AutoLayout = {
+  mode: 'vertical',
+  gap: 10,
+  wrapGap: 10,
+  padding: { top: 10, right: 10, bottom: 10, left: 10 },
+  justify: 'start',
+  align: 'start',
+  wrap: false,
+};
+
+/** Sanitize an unknown payload into a valid AutoLayout (load-time). */
+export function normalizeAutoLayout(raw: unknown): AutoLayout | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Partial<AutoLayout>;
+  const num = (v: unknown, d: number): number =>
+    typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : d;
+  const p = (r.padding ?? {}) as Partial<AutoLayout['padding']>;
+  return {
+    mode: r.mode === 'horizontal' ? 'horizontal' : 'vertical',
+    gap: num(r.gap, 10),
+    wrapGap: num(r.wrapGap, 10),
+    padding: { top: num(p.top, 10), right: num(p.right, 10), bottom: num(p.bottom, 10), left: num(p.left, 10) },
+    justify: (['start', 'center', 'end', 'space-between'] as const).includes(r.justify as never)
+      ? (r.justify as AutoLayout['justify'])
+      : 'start',
+    align: (['start', 'center', 'end'] as const).includes(r.align as never) ? (r.align as AutoLayout['align']) : 'start',
+    wrap: !!r.wrap,
+  };
+}
+
 /** A pen-tool point. (x, y) is the anchor; (hx, hy) is the "out" handle offset
  *  from the anchor. The "in" handle is mirrored: (-hx, -hy). (0,0) = corner point. */
 export interface PathPoint {
@@ -141,6 +192,12 @@ export interface IrisNode {
   flipH: boolean;
   /** mirror vertically about the box center */
   flipV: boolean;
+  /* auto layout (frames only; null = regular frame) */
+  layout: AutoLayout | null;
+  /** horizontal sizing mode (auto-layout frames and children of a layout parent) */
+  sizingH: AxisSizing;
+  /** vertical sizing mode */
+  sizingV: AxisSizing;
 }
 
 export interface IrisPage {
@@ -383,6 +440,9 @@ export function createNode(
     dash: 'solid',
     flipH: false,
     flipV: false,
+    layout: null,
+    sizingH: 'fixed',
+    sizingV: 'fixed',
     ...defaultsFor(type),
     ...patch,
   };
@@ -597,10 +657,14 @@ export function normalizeDoc(raw: unknown): IrisDoc {
   }
   for (const n of Object.values(src.nodesById ?? {})) {
     if (!n || typeof n !== 'object' || typeof n.id !== 'string') continue;
+    const patch = { ...(n as Partial<IrisNode>) };
+    patch.layout = normalizeAutoLayout((n as { layout?: unknown }).layout);
+    if (patch.sizingH !== 'fill' && patch.sizingH !== 'hug') patch.sizingH = 'fixed';
+    if (patch.sizingV !== 'fill' && patch.sizingV !== 'hug') patch.sizingV = 'fixed';
     const node = createNode(
       VALID_TYPES.includes(n.type as NodeType) ? (n.type as NodeType) : 'rect',
       typeof n.pageId === 'string' ? n.pageId : doc.pages[0],
-      n as Partial<IrisNode>,
+      patch,
     );
     doc.nodesById[node.id] = node;
   }

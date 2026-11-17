@@ -5,6 +5,7 @@
  */
 
 import type { NodeType, PathPoint } from './model';
+import type { ID } from './model';
 import type { Rect, SnapGuide } from './geometry';
 
 export interface PenDraft {
@@ -36,6 +37,18 @@ export interface GuideDrag {
   entered: boolean;
 }
 
+/** Active drag of children inside an auto-layout frame (reorder mode). */
+export interface LayoutDrag {
+  /** the auto-layout frame the children belong to */
+  frameId: ID;
+  /** dragged child ids (solver skips positioning them) */
+  ids: ID[];
+  /** provisional insertion index among the frame's children */
+  index: number;
+  /** true once the drag left the frame (reparent flow) */
+  left: boolean;
+}
+
 export interface OverlayState {
   marquee: Rect | null;
   guides: SnapGuide[];
@@ -53,6 +66,8 @@ export interface OverlayState {
   guideDrag: GuideDrag | null;
   /** last color sampled by the eyedropper */
   pickedColor: string | null;
+  /** active auto-layout reorder drag */
+  layoutDrag: LayoutDrag | null;
 }
 
 export const overlay: OverlayState = {
@@ -69,6 +84,7 @@ export const overlay: OverlayState = {
   rendering: false,
   guideDrag: null,
   pickedColor: null,
+  layoutDrag: null,
 };
 
 export function clearTransient(): void {
@@ -76,4 +92,5 @@ export function clearTransient(): void {
   overlay.guides = [];
   overlay.dragBadge = null;
   overlay.guideDrag = null;
+  overlay.layoutDrag = null;
 }

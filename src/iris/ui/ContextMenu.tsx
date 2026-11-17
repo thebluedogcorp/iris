@@ -73,6 +73,9 @@ export function ContextMenu() {
       copyStyle: s.copyStyle,
       pasteStyle: s.pasteStyle,
       hasStyleClipboard: !!s.styleClipboard,
+      addAutoLayout: s.addAutoLayout,
+      removeAutoLayout: s.removeAutoLayout,
+      hasLayoutFrame: s.selection.some((id) => !!s.doc.nodesById[id]?.layout),
     })),
   );
 
@@ -123,6 +126,9 @@ export function ContextMenu() {
         { sep: true },
         { label: 'Group', shortcut: 'Ctrl+G', run: actions.groupSelection },
         { label: 'Ungroup', shortcut: 'Ctrl+Shift+G', run: actions.ungroupSelection },
+        { sep: true },
+        { label: 'Add Auto Layout', shortcut: 'Shift+A', run: actions.addAutoLayout },
+        { label: 'Remove Auto Layout', shortcut: 'Alt+Shift+A', disabled: !actions.hasLayoutFrame, run: actions.removeAutoLayout },
         { sep: true },
         { label: 'Flip Horizontal', shortcut: 'Shift+H', run: () => actions.flipSelection('h') },
         { label: 'Flip Vertical', shortcut: 'Shift+V', run: () => actions.flipSelection('v') },

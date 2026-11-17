@@ -14,6 +14,8 @@ import {
   IrisNode,
   NodeType,
   FramePreset,
+  AutoLayout,
+  AxisSizing,
   createDefaultDoc,
   createNode,
   createPage,
@@ -55,6 +57,7 @@ import {
 } from './library';
 import { buildTemplate } from './templates';
 import { IrisRoute, pushRoute, replaceRoute, routeFromLocation } from './router';
+import { inferAutoLayout, relayoutPage } from './layout';
 
 export type Tool =
   | 'move'
@@ -162,6 +165,8 @@ export interface IrisStore {
   showComments: boolean;
   /** right panel tab (design / prototype) */
   rightTab: RightPanelTab;
+  /** command palette (Ctrl+K) */
+  paletteOpen: boolean;
 
   /* tool / view */
   setTool: (tool: Tool) => void;
@@ -286,6 +291,15 @@ export interface IrisStore {
   setLeftPanelView: (view: LeftPanelView, toggle?: boolean) => void;
   toggleLeftPanel: () => void;
   setRightTab: (tab: RightPanelTab) => void;
+
+  /* auto layout */
+  addAutoLayout: () => void;
+  removeAutoLayout: () => void;
+  updateAutoLayout: (id: ID, patch: Partial<Omit<AutoLayout, 'padding'>> & { padding?: Partial<AutoLayout['padding']> }) => void;
+  updateSizing: (ids: ID[], axis: 'h' | 'v', mode: AxisSizing) => void;
+
+  /* command palette */
+  setPaletteOpen: (v: boolean) => void;
 
   /* frame presets */
   addFramePreset: (preset: FramePreset) => ID;
@@ -440,6 +454,7 @@ function bootIris(): BootState | null {
   const doc = stored.doc;
   const pageId =
     stored.currentPageId && doc.pages.includes(stored.currentPageId) ? stored.currentPageId : doc.pages[0];
+  relayoutPage(doc, pageId);
   return { doc, docId: route.id, pageId, viewport: stored.viewport ?? DEFAULT_VIEWPORT };
 }
 
@@ -479,6 +494,8 @@ export const useIris = create<IrisStore>()((set, get) => {
     }
     const draft = draftOf(state.doc);
     mutator(draft);
+    // auto layout: re-flow layout frames after every mutation (no-op without any)
+    relayoutPage(draft, get().currentPageId);
     const pageId = get().currentPageId;
     let sel = get().selection.filter((id) => {
       const n = draft.nodesById[id];
@@ -606,6 +623,7 @@ export const useIris = create<IrisStore>()((set, get) => {
     activeCommentId: null,
     showComments: true,
     rightTab: 'design',
+    paletteOpen: false,
 
     setLeftPanelView: (view, toggle) =>
       set((s) => {
@@ -617,6 +635,7 @@ export const useIris = create<IrisStore>()((set, get) => {
     setPresenting: (v) => set({ presenting: v }),
     setInspectMode: (v) => set({ inspectMode: v }),
     setShareOpen: (v) => set({ shareOpen: v }),
+    setPaletteOpen: (v) => set({ paletteOpen: v }),
 
     /* ------------------------- comments ---------------------------- */
     addComment: (x, y, text) => {
@@ -766,6 +785,7 @@ export const useIris = create<IrisStore>()((set, get) => {
     setCurrentPage: (id) => {
       const st = get();
       if (!st.doc.pagesById[id] || id === st.currentPageId) return;
+      relayoutPage(st.doc, id);
       set({ currentPageId: id, selection: [], editingTextId: null, editingPathId: null, hoverId: null });
     },
     addPage: () => {
@@ -1032,7 +1052,10 @@ export const useIris = create<IrisStore>()((set, get) => {
           const w = Math.max(n.type === 'line' || n.type === 'arrow' ? 0 : 1, rect.w);
           const h = Math.max(n.type === 'line' || n.type === 'arrow' ? 0 : 1, rect.h);
           putNode(draft, id, { x: rect.x, y: rect.y, w, h });
-          if (isContainer(n) && oldW > 0.01 && oldH > 0.01) {
+          if (n.layout) {
+            // auto-layout frames: children are positioned by the layout,
+            // never scaled with the frame
+          } else if (isContainer(n) && oldW > 0.01 && oldH > 0.01) {
             scaleSubtree(draft, id, w / oldW, h / oldH, true);
           } else if (n.type === 'text' && Math.abs(w - oldW) > 0.01 && Math.abs(h - oldH) > 0.01) {
             const s = ((w / oldW) * 0.5 + (h / oldH) * 0.5);
@@ -1285,6 +1308,164 @@ export const useIris = create<IrisStore>()((set, get) => {
           }
         },
         { history: 'zorder' },
+      );
+    },
+
+    /* ------------------------- auto layout -------------------------- */
+    addAutoLayout: () => {
+      const state = get();
+      const pageId = currentPage();
+      const sel = state.selection.map((id) => state.doc.nodesById[id]).filter(Boolean) as IrisNode[];
+      if (sel.length === 0) {
+        get().toast('Select objects to add auto layout (Shift+A)');
+        return;
+      }
+      if (sel.length === 1 && (sel[0].type === 'frame' || sel[0].type === 'group')) {
+        // convert in place
+        const target = sel[0];
+        commit(
+          (draft) => {
+            const f = draft.nodesById[target.id];
+            if (!f) return;
+            const kids = f.children.map((id) => draft.nodesById[id]).filter(Boolean) as IrisNode[];
+            const inferred = inferAutoLayout(f, kids);
+            putNode(draft, f.id, {
+              type: 'frame',
+              layout: inferred,
+              sizingH: 'hug',
+              sizingV: 'hug',
+              clip: f.type === 'frame' ? f.clip : true,
+            });
+          },
+          { history: 'auto-layout', selection: [target.id] },
+        );
+        get().toast(sel[0].type === 'group' ? 'Group converted to auto layout frame' : 'Auto layout added');
+        return;
+      }
+      // wrap selection in a new auto-layout frame
+      const parentId = sel[0].parentId;
+      if (sel.some((n) => n.parentId !== parentId)) {
+        get().toast('Auto layout wrap requires objects with the same parent');
+        return;
+      }
+      const rects = sel.map((n) => {
+        const m = nodeLocalMatrix(n);
+        return {
+          x: Math.min(mApplyVec(m, 0, 0).x, mApplyVec(m, n.w, 0).x, mApplyVec(m, n.w, n.h).x, mApplyVec(m, 0, n.h).x),
+          y: Math.min(mApplyVec(m, 0, 0).y, mApplyVec(m, n.w, 0).y, mApplyVec(m, n.w, n.h).y, mApplyVec(m, 0, n.h).y),
+          x2: Math.max(mApplyVec(m, 0, 0).x, mApplyVec(m, n.w, 0).x, mApplyVec(m, n.w, n.h).x, mApplyVec(m, 0, n.h).x),
+          y2: Math.max(mApplyVec(m, 0, 0).y, mApplyVec(m, n.w, 0).y, mApplyVec(m, n.w, n.h).y, mApplyVec(m, 0, n.h).y),
+        };
+      });
+      const x = Math.min(...rects.map((r) => r.x));
+      const y = Math.min(...rects.map((r) => r.y));
+      const x2 = Math.max(...rects.map((r) => r.x2));
+      const y2 = Math.max(...rects.map((r) => r.y2));
+      const spreadX = x2 - x;
+      const spreadY = y2 - y;
+      const mode: AutoLayout['mode'] = spreadY >= spreadX ? 'vertical' : 'horizontal';
+      const frame = createNode('frame', pageId, {
+        name: nextName(state.doc, 'frame'),
+        x,
+        y,
+        w: Math.max(1, x2 - x),
+        h: Math.max(1, y2 - y),
+        parentId,
+        fill: null,
+        children: [],
+        layout: {
+          mode,
+          gap: 10,
+          wrapGap: 10,
+          padding: { top: 10, right: 10, bottom: 10, left: 10 },
+          justify: 'start',
+          align: 'start',
+          wrap: false,
+        },
+        sizingH: 'hug',
+        sizingV: 'hug',
+      });
+      const ordered = sel.slice().sort((a, b) => {
+        const list = parentId === null ? state.doc.pagesById[pageId].nodeIds : state.doc.nodesById[parentId].children;
+        return list.indexOf(a.id) - list.indexOf(b.id);
+      });
+      commit(
+        (draft) => {
+          for (const n of ordered) removeChildRef(draft, pageId, parentId, n.id);
+          draft.nodesById[frame.id] = frame;
+          for (const n of ordered) putNode(draft, n.id, { parentId: frame.id });
+          putNode(draft, frame.id, { children: ordered.map((n) => n.id) });
+          insertChildRef(draft, pageId, parentId, frame.id);
+        },
+        { history: 'auto-layout', selection: [frame.id] },
+      );
+      get().toast(`Wrapped ${ordered.length} object${ordered.length === 1 ? '' : 's'} in an auto layout frame`);
+    },
+
+    removeAutoLayout: () => {
+      const state = get();
+      const frames = state.selection
+        .map((id) => state.doc.nodesById[id])
+        .filter((n): n is IrisNode => !!n && !!n.layout);
+      if (frames.length === 0) {
+        get().toast('Select an auto layout frame to remove');
+        return;
+      }
+      commit(
+        (draft) => {
+          for (const f of frames) {
+            putNode(draft, f.id, { layout: null, sizingH: 'fixed', sizingV: 'fixed' });
+            // children keep their laid-out positions
+            for (const c of f.children) {
+              const n = draft.nodesById[c];
+              if (n) putNode(draft, c, { sizingH: 'fixed', sizingV: 'fixed' });
+            }
+          }
+        },
+        { history: 'auto-layout' },
+      );
+      get().toast('Auto layout removed');
+    },
+
+    updateAutoLayout: (id, patch) => {
+      const state = get();
+      const n = state.doc.nodesById[id];
+      if (!n || !n.layout) return;
+      commit(
+        (draft) => {
+          const cur = draft.nodesById[id];
+          if (!cur || !cur.layout) return;
+          const { padding, ...rest } = patch;
+          const next: AutoLayout = {
+            ...cur.layout,
+            ...rest,
+            padding: { ...cur.layout.padding, ...(padding ?? {}) },
+          };
+          putNode(draft, id, { layout: next });
+        },
+        { history: 'auto-layout' },
+      );
+    },
+
+    updateSizing: (ids, axis, mode) => {
+      const state = get();
+      if (ids.length === 0) return;
+      commit(
+        (draft) => {
+          for (const id of ids) {
+            const n = draft.nodesById[id];
+            if (!n) continue;
+            const patch: Partial<IrisNode> = axis === 'h' ? { sizingH: mode } : { sizingV: mode };
+            // text nodes: hug width == auto width
+            if (n.type === 'text' && axis === 'h') {
+              if (mode === 'hug') patch.autoWidth = true;
+              else if (mode === 'fixed') patch.autoWidth = false;
+            }
+            // a layout frame switching to hug keeps its children flow
+            putNode(draft, id, patch);
+          }
+        },
+        { history: 'sizing' },
       );
     },
 
@@ -1724,6 +1905,7 @@ export const useIris = create<IrisStore>()((set, get) => {
       get().flushSave();
       const doc = normalizeDoc(rawDoc);
       if (savedName) doc.name = savedName;
+      relayoutPage(doc, doc.pages[0]);
       const entry = importDocIntoLibrary(doc);
       set({
         doc,
@@ -1757,6 +1939,7 @@ export const useIris = create<IrisStore>()((set, get) => {
       const doc = stored.doc;
       const pageId =
         stored.currentPageId && doc.pages.includes(stored.currentPageId) ? stored.currentPageId : doc.pages[0];
+      relayoutPage(doc, pageId);
       set({
         doc,
         docId: id,

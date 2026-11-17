@@ -32,6 +32,7 @@ import { ShortcutsOverlay } from './ShortcutsOverlay';
 import { CommentLayer } from './CommentLayer';
 import { PresentationView } from './PresentationView';
 import { ShareDialog } from './ShareDialog';
+import { CommandPalette } from './CommandPalette';
 import { HelpButton } from './HelpButton';
 import { useDesktopWiring } from '../desktop/useDesktopWiring';
 
@@ -83,6 +84,7 @@ export default function IrisApp() {
           <ExportDialog />
           <ShortcutsOverlay />
           <ShareDialog />
+          <CommandPalette />
           {presenting ? <PresentationView /> : null}
         </div>
       )}

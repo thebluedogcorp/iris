@@ -917,6 +917,10 @@ function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.g
     c.textBaseline = 'alphabetic';
   }
 
+  // auto-layout guides (rose): gaps + padding of a selected layout frame,
+  // and the reorder insertion bar while dragging children
+  drawLayoutGuides(c, s, toScreen);
+
   // pen draft
   if (overlay.penDraft && overlay.penDraft.points.length > 0) {
     const draft = overlay.penDraft;
@@ -1015,6 +1019,194 @@ function drawNodeOutline(
   corners.forEach((p, i) => (i === 0 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y)));
   c.closePath();
   c.stroke();
+}
+
+/* ------------------------------------------------------------------ */
+/* Auto-layout guides (Figma rose)                                     */
+/* ------------------------------------------------------------------ */
+
+const ROSE = '#FF2472';
+
+/** rose distance annotation: line + arrowheads + value label */
+function roseMeasure(
+  c: CanvasRenderingContext2D,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  label: string,
+): void {
+  const horiz = Math.abs(x2 - x1) >= Math.abs(y2 - y1);
+  c.strokeStyle = ROSE;
+  c.fillStyle = ROSE;
+  c.lineWidth = 1;
+  c.setLineDash([]);
+  c.beginPath();
+  c.moveTo(x1, y1);
+  c.lineTo(x2, y2);
+  c.stroke();
+  // arrowheads
+  const ah = 3.5;
+  c.beginPath();
+  if (horiz) {
+    const d = x2 >= x1 ? 1 : -1;
+    c.moveTo(x1, y1);
+    c.lineTo(x1 + d * ah, y1 - ah * 0.6);
+    c.lineTo(x1 + d * ah, y1 + ah * 0.6);
+    c.closePath();
+    c.moveTo(x2, y2);
+    c.lineTo(x2 - d * ah, y2 - ah * 0.6);
+    c.lineTo(x2 - d * ah, y2 + ah * 0.6);
+    c.closePath();
+  } else {
+    const d = y2 >= y1 ? 1 : -1;
+    c.moveTo(x1, y1);
+    c.lineTo(x1 - ah * 0.6, y1 + d * ah);
+    c.lineTo(x1 + ah * 0.6, y1 + d * ah);
+    c.closePath();
+    c.moveTo(x2, y2);
+    c.lineTo(x2 - ah * 0.6, y2 - d * ah);
+    c.lineTo(x2 + ah * 0.6, y2 - d * ah);
+    c.closePath();
+  }
+  c.fill();
+  // label pill
+  c.font = '600 9px Inter, system-ui, sans-serif';
+  const tw = c.measureText(label).width;
+  const padX = 4;
+  const bw = tw + padX * 2;
+  const bh = 13;
+  const cx = (x1 + x2) / 2;
+  const cy = (y1 + y2) / 2;
+  const bx = cx - bw / 2;
+  const by = cy - bh / 2;
+  c.fillStyle = '#1E1E1E';
+  roundRectPath(c, bx, by, bw, bh, 3);
+  c.fill();
+  c.strokeStyle = ROSE;
+  c.lineWidth = 1;
+  c.stroke();
+  c.fillStyle = ROSE;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(label, cx, cy + 0.5);
+  c.textAlign = 'left';
+  c.textBaseline = 'alphabetic';
+}
+
+/** Gap + padding annotations for a selected auto-layout frame and the
+ *  rose insertion bar during a reorder drag. */
+function drawLayoutGuides(
+  c: CanvasRenderingContext2D,
+  s: ReturnType<typeof useIris.getState>,
+  toScreen: (p: Vec) => Vec,
+): void {
+  const doc = s.doc;
+  const vp = s.viewport;
+
+  // insertion bar during a reorder drag
+  const ld = overlay.layoutDrag;
+  if (ld) {
+    const frame = doc.nodesById[ld.frameId];
+    if (frame?.layout) {
+      const horiz = frame.layout.mode === 'horizontal';
+      const others = frame.children
+        .filter((id) => !ld.ids.includes(id))
+        .map((id) => doc.nodesById[id])
+        .filter((n): n is IrisNode => !!n);
+      const m = nodeWorldMatrix(doc, frame);
+      const tl = toScreen(mApply(m, 0, 0));
+      const br = toScreen(mApply(m, frame.w, frame.h));
+      const pad = frame.layout.padding;
+      const padL = toScreen(mApply(m, pad.left, 0));
+      const padT = toScreen(mApply(m, 0, pad.top));
+      const padR = toScreen(mApply(m, frame.w - pad.right, 0));
+      const padB = toScreen(mApply(m, 0, frame.h - pad.bottom));
+      let a: number;
+      let b: number;
+      if (ld.index <= 0) {
+        a = horiz ? padL.x : padT.y;
+        b = a;
+      } else if (ld.index >= others.length) {
+        a = horiz ? padR.x : padB.y;
+        b = a;
+      } else {
+        const prev = others[ld.index - 1];
+        const pm = nodeWorldMatrix(doc, prev);
+        const pEdge = horiz ? toScreen(mApply(pm, prev.w, 0)).x : toScreen(mApply(pm, 0, prev.h)).y;
+        const next = others[ld.index];
+        const nm = nodeWorldMatrix(doc, next);
+        const nEdge = horiz ? toScreen(mApply(nm, 0, 0)).x : toScreen(mApply(nm, 0, 0)).y;
+        a = pEdge;
+        b = nEdge;
+      }
+      c.fillStyle = ROSE;
+      if (horiz) {
+        const x = (a + b) / 2;
+        c.globalAlpha = 0.9;
+        roundRectPath(c, x - 1.5, tl.y + 2, 3, Math.max(4, br.y - tl.y - 4), 1.5);
+        c.fill();
+        c.globalAlpha = 1;
+      } else {
+        const y = (a + b) / 2;
+        c.globalAlpha = 0.9;
+        roundRectPath(c, tl.x + 2, y - 1.5, Math.max(4, br.x - tl.x - 4), 3, 1.5);
+        c.fill();
+        c.globalAlpha = 1;
+      }
+    }
+  }
+
+  // spacing annotations when a single layout frame is selected
+  if (s.selection.length !== 1) return;
+  const frame = doc.nodesById[s.selection[0]];
+  if (!frame || !frame.layout || s.editingTextId) return;
+  if (vp.zoom < 0.2) return;
+  const L = frame.layout;
+  const horiz = L.mode === 'horizontal';
+  const kids = frame.children
+    .map((id) => doc.nodesById[id])
+    .filter((n): n is IrisNode => !!n && n.visible !== false);
+  if (kids.length === 0) return;
+
+  const m = nodeWorldMatrix(doc, frame);
+  const corners = [toScreen(mApply(m, 0, 0)), toScreen(mApply(m, frame.w, frame.h))];
+  const kidBoxes = kids.map((k) => {
+    const km = nodeWorldMatrix(doc, k);
+    return {
+      tl: toScreen(mApply(km, 0, 0)),
+      br: toScreen(mApply(km, k.w, k.h)),
+    };
+  });
+
+  // gap annotations between adjacent children along the main axis
+  for (let i = 1; i < kids.length; i++) {
+    const A = kidBoxes[i - 1];
+    const B = kidBoxes[i];
+    const gapPx = horiz ? B.tl.x - A.br.x : B.tl.y - A.br.y;
+    if (gapPx < 3) continue;
+    const midY = (Math.max(A.tl.y, B.tl.y) + Math.min(A.br.y, B.br.y)) / 2;
+    const midX = (Math.max(A.tl.x, B.tl.x) + Math.min(A.br.x, B.br.x)) / 2;
+    if (horiz) roseMeasure(c, A.br.x, midY, B.tl.x, midY, String(Math.round(L.gap)));
+    else roseMeasure(c, midX, A.br.y, midX, B.tl.y, String(Math.round(L.gap)));
+  }
+
+  // padding annotations on the inner edges
+  const pad = L.padding;
+  const contentL = Math.min(...kidBoxes.map((b) => b.tl.x));
+  const contentT = Math.min(...kidBoxes.map((b) => b.tl.y));
+  const contentR = Math.max(...kidBoxes.map((b) => b.br.x));
+  const contentB = Math.max(...kidBoxes.map((b) => b.br.y));
+  const midCx = (contentL + contentR) / 2;
+  const midCy = (contentT + contentB) / 2;
+  if (pad.top > 0 && contentT - corners[0].y >= 3)
+    roseMeasure(c, midCx, corners[0].y, midCx, contentT, String(Math.round(pad.top)));
+  if (pad.bottom > 0 && corners[1].y - contentB >= 3)
+    roseMeasure(c, midCx, corners[1].y, midCx, contentB, String(Math.round(pad.bottom)));
+  if (pad.left > 0 && contentL - corners[0].x >= 3)
+    roseMeasure(c, corners[0].x, midCy, contentL, midCy, String(Math.round(pad.left)));
+  if (pad.right > 0 && corners[1].x - contentR >= 3)
+    roseMeasure(c, corners[1].x, midCy, contentR, midCy, String(Math.round(pad.right)));
 }
 
 /* ------------------------------------------------------------------ */
