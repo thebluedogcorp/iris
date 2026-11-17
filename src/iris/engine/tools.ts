@@ -15,6 +15,7 @@ import {
   boundsOfNodes,
   computeSnap,
   frameAtPoint,
+  frameLabelAtPoint,
   hitTestDeep,
   mApply,
   mApplyVec,
@@ -757,8 +758,11 @@ function onPointerDown(e: PointerEvent): void {
     return;
   }
 
-  // object hit?
-  const hit = hitTestDeep(s.doc, s.currentPageId, world, 6 / s.viewport.zoom);
+  // object hit? frame name labels are dedicated selection targets and take
+  // priority over everything below them (Figma behavior)
+  const hit =
+    frameLabelAtPoint(s.doc, s.currentPageId, content, s.viewport) ??
+    hitTestDeep(s.doc, s.currentPageId, world, 6 / s.viewport.zoom);
   if (hit) {
     const deep = e.ctrlKey || e.metaKey;
     const resolved = resolveClick(s.doc, hit, deep);
@@ -883,7 +887,9 @@ function onPointerMove(e: PointerEvent): void {
         setCursor(hh ? handleCursor(hh) : overlay.spaceDown ? 'grab' : 'default');
       }
       if (!hh) {
-        const hit = hitTestDeep(s.doc, s.currentPageId, world, 6 / s.viewport.zoom);
+        const hit =
+          frameLabelAtPoint(s.doc, s.currentPageId, content, s.viewport) ??
+          hitTestDeep(s.doc, s.currentPageId, world, 6 / s.viewport.zoom);
         const id = hit?.id ?? null;
         if (id !== s.hoverId) s.setHover(id);
       } else if (s.hoverId) {
@@ -1516,7 +1522,12 @@ function onDoubleClick(e: MouseEvent): void {
   if (s.editingTextId) return;
   const world = eventWorld(e);
   const hit = hitTestDeep(s.doc, s.currentPageId, world, 6 / s.viewport.zoom);
-  if (!hit) return;
+  if (!hit) {
+    // double-click on a frame's empty background enters (selects) the frame
+    const frame = frameAtPoint(s.doc, s.currentPageId, world);
+    if (frame) s.setSelection([frame.id]);
+    return;
+  }
   if (hit.type === 'text') {
     s.setEditingText(hit.id);
     return;

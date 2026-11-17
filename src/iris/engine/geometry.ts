@@ -548,7 +548,13 @@ export function hitTestNode(doc: IrisDoc, n: IrisNode, worldPt: Vec, tolerance: 
   return false;
 }
 
-/** Deepest node under a world point (children before parents), or null. */
+/** Deepest node under a world point (children before parents), or null.
+ *
+ * Figma-style frame semantics: the EMPTY INTERIOR of a frame is not a
+ * selection target — frames are grabbed via their border band only. Their
+ * name labels are separate selection targets resolved by `frameLabelAtPoint`
+ * (tools.ts). This keeps objects inside frames easy to click and lets clicks
+ * on empty frame areas behave like normal canvas. */
 export function hitTestDeep(doc: IrisDoc, pageId: ID, worldPt: Vec, tolerance: number): IrisNode | null {
   const page = doc.pagesById[pageId];
   if (!page) return null;
@@ -561,9 +567,13 @@ export function hitTestDeep(doc: IrisDoc, pageId: ID, worldPt: Vec, tolerance: n
         if (r) return r;
       }
       if (n.type === 'frame') {
+        /* border band only — the interior falls through as empty canvas */
         const inv = mInvert(nodeWorldMatrix(doc, n));
         const p = mApply(inv, worldPt.x, worldPt.y);
-        if (p.x >= 0 && p.y >= 0 && p.x <= n.w && p.y <= n.h) return n;
+        const tol = Math.max(tolerance, 1);
+        const outer = p.x >= -tol && p.y >= -tol && p.x <= n.w + tol && p.y <= n.h + tol;
+        const inner = p.x >= tol && p.y >= tol && p.x <= n.w - tol && p.y <= n.h - tol;
+        if (outer && !inner) return n;
       }
       return null;
     }
@@ -572,6 +582,43 @@ export function hitTestDeep(doc: IrisDoc, pageId: ID, worldPt: Vec, tolerance: n
   for (let i = page.nodeIds.length - 1; i >= 0; i--) {
     const r = visit(page.nodeIds[i]);
     if (r) return r;
+  }
+  return null;
+}
+
+/**
+ * Frame name labels are dedicated selection targets (Figma behavior).
+ * Returns the root-level frame whose label contains `contentPt` — content
+ * coords are canvas coords minus the ruler origin, the same space the
+ * renderer's content transform uses (label content position =
+ * world * zoom + viewport). Topmost frame wins.
+ */
+export function frameLabelAtPoint(
+  doc: IrisDoc,
+  pageId: ID,
+  contentPt: Vec,
+  viewport: Viewport,
+): IrisNode | null {
+  const page = doc.pagesById[pageId];
+  if (!page) return null;
+  const ctx = getHitCtx();
+  const vp = viewport;
+  for (let i = page.nodeIds.length - 1; i >= 0; i--) {
+    const n = doc.nodesById[page.nodeIds[i]];
+    if (!n || !n.visible || n.locked || n.type !== 'frame') continue;
+    const box = nodeWorldAABB(doc, n);
+    const x = box.x * vp.zoom + vp.x;
+    const y = box.y * vp.zoom + vp.y;
+    if (y < 14) continue; // label hidden behind the ruler strip
+    let w: number;
+    if (ctx) {
+      ctx.font = '11px Inter, system-ui, sans-serif';
+      w = ctx.measureText(n.name).width;
+    } else {
+      w = Math.min(240, 8 * n.name.length);
+    }
+    const rect: Rect = { x: x - 3, y: y - 19, w: w + 6, h: 17 };
+    if (pointInRect(rect, contentPt)) return n;
   }
   return null;
 }
@@ -609,26 +656,28 @@ export function deepestFrameContaining(doc: IrisDoc, pageId: ID, rect: Rect): Ir
   return best;
 }
 
-/** Candidate node ids a marquee should select. */
+/** Candidate node ids a marquee should select (Figma semantics).
+ *
+ * Containers (frames, groups) are only picked when the marquee fully
+ * encloses them — a partial crossing falls through to their children so
+ * dragging inside a frame grabs its content instead of the frame itself. */
 export function marqueeCandidates(doc: IrisDoc, pageId: ID, rect: Rect): ID[] {
   const page = doc.pagesById[pageId];
   if (!page) return [];
-  const roots = page.nodeIds
-    .map((id) => doc.nodesById[id])
-    .filter((n): n is IrisNode => !!n && n.visible && !n.locked);
-  const hitting = roots.filter((n) => rectsIntersect(nodeWorldAABB(doc, n), rect));
-  if (hitting.length > 0) return hitting.map((n) => n.id);
-  const frame = deepestFrameContaining(doc, pageId, rect);
-  if (frame) {
-    return frame.children
-      .map((id) => doc.nodesById[id])
-      .filter(
-        (n): n is IrisNode =>
-          !!n && n.visible && !n.locked && rectsIntersect(nodeWorldAABB(doc, n), rect),
-      )
-      .map((n) => n.id);
-  }
-  return [];
+  const out: ID[] = [];
+  const visit = (id: ID): void => {
+    const n = doc.nodesById[id];
+    if (!n || !n.visible || n.locked) return;
+    const box = nodeWorldAABB(doc, n);
+    if (!rectsIntersect(box, rect)) return;
+    if ((n.type === 'frame' || n.type === 'group') && !rectContains(rect, box)) {
+      for (const c of n.children) visit(c);
+      return;
+    }
+    out.push(n.id);
+  };
+  page.nodeIds.forEach(visit);
+  return out;
 }
 
 /** Deepest frame containing a world point (for new-object parenting).

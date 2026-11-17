@@ -2,10 +2,18 @@
 
 /**
  * Bottom-center floating toolbar (Figma UI3 style, per spec screenshots).
- * Grouped tools with chevron dropdowns: Move / Frame / Shape / Pen / Text /
- * Actions, then Comment, a divider and the view toggles (hand, rulers, grid,
- * inspect). Dropdown rows: checkmark + icon + label + right-aligned shortcut,
- * selected row highlighted in Iris blue.
+ *
+ * Interaction model (Figma-like, per spec):
+ *  - Each tool group renders a MAIN button + a separate chevron button.
+ *  - Clicking the MAIN button immediately activates the group's last-used
+ *    tool (or the group default on first use) — it never opens a dropdown.
+ *  - Clicking the CHEVRON opens the group's dropdown listing every tool;
+ *    picking one activates it, closes the menu and becomes the group's
+ *    remembered tool (persisted to localStorage, independent per group).
+ *  - Keyboard shortcuts update the memory automatically (the memory tracks
+ *    the active tool whenever it belongs to a group).
+ *
+ * Then: Comment, a divider and the view toggles (hand, rulers, grid, inspect).
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -53,18 +61,18 @@ interface ToolOption {
 
 interface ToolGroup {
   id: string;
-  /** tools revealed in the dropdown */
-  options: ToolOption[];
-  /** fallback icon when no option in this group is active */
-  Icon: LucideIcon;
   ariaLabel: string;
+  /** activated by the main button when nothing is remembered yet */
+  defaultTool: Tool;
+  /** tools revealed in the dropdown (options without `tool` are actions) */
+  options: ToolOption[];
 }
 
 const GROUPS: ToolGroup[] = [
   {
     id: 'move',
     ariaLabel: 'Move tools',
-    Icon: MousePointer2,
+    defaultTool: 'move',
     options: [
       { tool: 'move', label: 'Move', shortcut: 'V', Icon: MousePointer2 },
       { tool: 'scale', label: 'Scale', shortcut: 'K', Icon: Scale },
@@ -74,7 +82,7 @@ const GROUPS: ToolGroup[] = [
   {
     id: 'frame',
     ariaLabel: 'Frame tools',
-    Icon: Frame,
+    defaultTool: 'frame',
     options: [
       { tool: 'frame', label: 'Frame', shortcut: 'F', Icon: Frame },
       { tool: 'section', label: 'Section', shortcut: 'Shift+S', Icon: Square },
@@ -84,7 +92,7 @@ const GROUPS: ToolGroup[] = [
   {
     id: 'shape',
     ariaLabel: 'Shape tools',
-    Icon: Square,
+    defaultTool: 'rect',
     options: [
       { tool: 'rect', label: 'Rectangle', shortcut: 'R', Icon: Square },
       { tool: 'line', label: 'Line', shortcut: 'L', Icon: Slash },
@@ -98,7 +106,7 @@ const GROUPS: ToolGroup[] = [
   {
     id: 'pen',
     ariaLabel: 'Pen tools',
-    Icon: PenTool,
+    defaultTool: 'pen',
     options: [
       { tool: 'pen', label: 'Pen', shortcut: 'P', Icon: PenTool },
       { tool: 'pencil', label: 'Pencil', shortcut: 'Shift+P', Icon: Pencil },
@@ -106,11 +114,39 @@ const GROUPS: ToolGroup[] = [
   },
   {
     id: 'text',
-    ariaLabel: 'Text tools',
-    Icon: Type,
+    ariaLabel: 'Text',
+    defaultTool: 'text',
     options: [{ tool: 'text', label: 'Text', shortcut: 'T', Icon: Type }],
   },
 ];
+
+/* ------------------------------------------------------------------ */
+/* per-group tool memory (persisted)                                   */
+/* ------------------------------------------------------------------ */
+
+const MEMORY_KEY = 'iris:tool-memory';
+
+function loadMemory(): Partial<Record<string, Tool>> {
+  try {
+    const raw = localStorage.getItem(MEMORY_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Partial<Record<string, Tool>>) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+const memory = loadMemory();
+
+function rememberTool(groupId: string, tool: Tool): void {
+  if (memory[groupId] === tool) return;
+  memory[groupId] = tool;
+  try {
+    localStorage.setItem(MEMORY_KEY, JSON.stringify(memory));
+  } catch {
+    /* storage unavailable — memory stays for this session */
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* dropdowns                                                           */
@@ -245,6 +281,25 @@ export function Toolbar() {
 
   const [openGroup, setOpenGroup] = useState<string | null>(null);
 
+  /* keep the per-group memory in sync when the tool changes from anywhere
+   * (keyboard shortcuts, menus, canvas interactions) */
+  useEffect(() => {
+    for (const g of GROUPS) {
+      if (g.options.some((o) => o.tool === tool)) {
+        rememberTool(g.id, tool);
+        break;
+      }
+    }
+  }, [tool]);
+
+  /** The tool the group's main button activates right now. */
+  const groupTool = (g: ToolGroup): Tool => {
+    if (g.options.some((o) => o.tool === tool)) return tool;
+    const remembered = memory[g.id];
+    if (remembered && g.options.some((o) => o.tool === remembered)) return remembered;
+    return g.defaultTool;
+  };
+
   return (
     <div
       className="flex max-w-full flex-wrap items-center justify-center gap-0.5 rounded-xl border border-[#3E3E3E] bg-[#2C2C2C] p-1 shadow-[0_8px_28px_rgba(0,0,0,0.45)]"
@@ -252,33 +307,51 @@ export function Toolbar() {
       aria-label="Tools"
     >
       {GROUPS.map((g) => {
-        const activeOpt = g.options.find((o) => o.tool === tool);
-        const Icon = activeOpt?.Icon ?? g.Icon;
-        const active = !!activeOpt;
+        const current = groupTool(g);
+        const currentOpt = g.options.find((o) => o.tool === current) ?? g.options[0];
+        const active = g.options.some((o) => o.tool === tool);
+        const hasDropdown = g.options.length > 1;
+        const mainTitle = currentOpt.shortcut
+          ? `${currentOpt.label} (${currentOpt.shortcut})`
+          : currentOpt.label;
         return (
-          <div key={g.id} className="relative">
+          <div
+            key={g.id}
+            className={`group relative flex items-center rounded-lg transition-colors ${
+              active ? 'bg-[#0D99FF] text-white' : 'text-[#D0D0D0] hover:bg-[#3A3A3A] hover:text-white'
+            }`}
+          >
+            {/* main button — always activates the group's current tool */}
             <button
               type="button"
-              className={`group flex h-9 items-center gap-0.5 rounded-lg px-1.5 transition-colors ${
-                active ? 'bg-[#0D99FF] text-white' : 'text-[#D0D0D0] hover:bg-[#3A3A3A] hover:text-white'
-              }`}
-              data-active={active}
+              className="flex h-9 w-8 items-center justify-center rounded-lg transition-colors"
               aria-pressed={active}
-              aria-label={g.ariaLabel}
-              aria-haspopup="menu"
-              aria-expanded={openGroup === g.id}
-              title={g.ariaLabel}
-              onClick={() => setOpenGroup(openGroup === g.id ? null : g.id)}
+              aria-label={mainTitle}
+              title={mainTitle}
+              onClick={() => setTool(current)}
             >
-              <Icon size={17} strokeWidth={1.75} aria-hidden />
-              <ChevronDown
-                size={10}
-                strokeWidth={2.25}
-                aria-hidden
-                className={active ? 'text-white/85' : 'text-[#8B8B8B] group-hover:text-[#C9C9C9]'}
-              />
+              <currentOpt.Icon size={17} strokeWidth={1.75} aria-hidden />
             </button>
-            {openGroup === g.id ? (
+            {/* dedicated dropdown button — the only way to reveal alternatives */}
+            {hasDropdown ? (
+              <button
+                type="button"
+                className="flex h-9 w-[18px] items-center justify-center rounded-lg transition-colors"
+                aria-label={`${g.ariaLabel} — more tools`}
+                aria-haspopup="menu"
+                aria-expanded={openGroup === g.id}
+                title={`${g.ariaLabel} — more tools`}
+                onClick={() => setOpenGroup(openGroup === g.id ? null : g.id)}
+              >
+                <ChevronDown
+                  size={10}
+                  strokeWidth={2.25}
+                  aria-hidden
+                  className={active ? 'text-white/85' : 'text-[#8B8B8B] group-hover:text-[#C9C9C9]'}
+                />
+              </button>
+            ) : null}
+            {openGroup === g.id && hasDropdown ? (
               <ToolDropdown options={g.options} onClose={() => setOpenGroup(null)} />
             ) : null}
           </div>
