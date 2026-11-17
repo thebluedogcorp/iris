@@ -48,6 +48,7 @@ import {
   Plus,
   RotateCw,
   RotateCcw,
+  Trash2,
   Unlock,
   type LucideIcon,
 } from 'lucide-react';
@@ -59,11 +60,25 @@ import {
   BLEND_MODES,
   FRAME_PRESETS,
   NODE_TYPE_LABEL,
+  OVERLAY_POSITIONS,
+  PROTO_ACTIONS,
+  PROTO_ANIMATIONS,
+  PROTO_EASINGS,
+  PROTO_TRIGGERS,
   type ArrowHead,
   type AxisSizing,
   type DashStyle,
+  type FrameOverflow,
+  type ID,
+  type IrisDoc,
+  type IrisInteraction,
   type IrisNode,
   type NodeType,
+  type OverlayPosition,
+  type ProtoAction,
+  type ProtoAnimation,
+  type ProtoEasing,
+  type ProtoTrigger,
   type TextCase,
 } from '../engine/model';
 import { getRecentColors, getSwatches } from '../engine/colors';
@@ -112,6 +127,65 @@ const ARROW_HEADS: { value: ArrowHead; label: string }[] = [
   { value: 'triangle', label: 'Filled' },
   { value: 'line', label: 'Chevron' },
 ];
+
+/* Prototype (interaction) human labels — shared by selects and summary rows. */
+const TRIGGER_LABELS: Record<ProtoTrigger, string> = {
+  click: 'On click',
+  hover: 'On hover',
+  press: 'On press',
+  keydown: 'On key',
+  delay: 'After delay',
+};
+
+const ACTION_LABELS: Record<ProtoAction, string> = {
+  navigate: 'Navigate to',
+  back: 'Back',
+  url: 'Open URL',
+  overlay: 'Open overlay',
+  'close-overlay': 'Close overlay',
+  'scroll-to': 'Scroll to',
+};
+
+const ANIMATION_LABELS: Record<ProtoAnimation, string> = {
+  instant: 'Instant',
+  dissolve: 'Dissolve',
+  'smart-animate': 'Smart animate',
+  'slide-left': 'Slide left',
+  'slide-right': 'Slide right',
+  'slide-up': 'Slide up',
+  'slide-down': 'Slide down',
+  'move-in-left': 'Move in left',
+  'move-in-right': 'Move in right',
+  'move-in-top': 'Move in top',
+  'move-in-bottom': 'Move in bottom',
+  'move-out-left': 'Move out left',
+  'move-out-right': 'Move out right',
+  'move-out-top': 'Move out top',
+  'move-out-bottom': 'Move out bottom',
+  'push-left': 'Push left',
+  'push-right': 'Push right',
+  'push-up': 'Push up',
+  'push-down': 'Push down',
+};
+
+const EASING_LABELS: Record<ProtoEasing, string> = {
+  linear: 'Linear',
+  'ease-in': 'Ease in',
+  'ease-out': 'Ease out',
+  'ease-in-out': 'Ease in and out',
+  spring: 'Spring',
+};
+
+const OVERLAY_POS_LABELS: Record<OverlayPosition, string> = {
+  center: 'Center',
+  'top-left': 'Top left',
+  'top-center': 'Top center',
+  'top-right': 'Top right',
+  'bottom-left': 'Bottom left',
+  'bottom-center': 'Bottom center',
+  'bottom-right': 'Bottom right',
+  manual: 'Manual',
+};
 
 const ALIGN_TOOLS: { mode: AlignMode; label: string; Icon: LucideIcon }[] = [
   { mode: 'left', label: 'Align left', Icon: AlignStartVertical },
@@ -1039,14 +1113,22 @@ function DesignTab() {
             </div>
           </div>
           {showClip && single ? (
-            <div className="mt-2.5 flex items-center justify-between">
-              <span className="text-[11px] text-[#E5E5E5]">Clip content</span>
-              <Switch
-                checked={single.clip}
-                aria-label="Clip content"
-                className="data-[state=checked]:bg-[#0D99FF] data-[state=unchecked]:bg-[#383838]"
-                onCheckedChange={(v) => actions.updateNodes([single.id], { clip: v }, { history: 'clip' })}
-              />
+            <div className="mt-2.5">
+              <RowLabel>Overflow</RowLabel>
+              <select
+                className="iris-select"
+                aria-label="Frame overflow"
+                value={single.overflow}
+                onChange={(e) => {
+                  const v = e.target.value as FrameOverflow;
+                  actions.updateNodes([single.id], { overflow: v, clip: v !== 'visible' }, { history: 'overflow' });
+                }}
+              >
+                <option value="visible">Visible</option>
+                <option value="hidden">Hidden</option>
+                <option value="scroll">Scroll</option>
+              </select>
+              <p className="mt-1 text-[10px] leading-4 text-[#6F6F6F]">Scroll frames scroll in the prototype.</p>
             </div>
           ) : null}
         </Section>
@@ -1894,56 +1976,539 @@ function InspectTab() {
   );
 }
 
-/** Prototype tab: presentation controls. */
-function PrototypeTab() {
+/* ------------------------------------------------------------------ */
+/* Prototype tab: interactions on the selection, flows, presenting     */
+/* ------------------------------------------------------------------ */
+
+/** Top-level frames of a page — prototype destinations and flow starts. */
+function pageFrames(doc: IrisDoc, pageId: ID): IrisNode[] {
+  const page = doc.pagesById[pageId];
+  return (page?.nodeIds ?? [])
+    .map((id) => doc.nodesById[id])
+    .filter((n): n is IrisNode => !!n && n.type === 'frame');
+}
+
+/** Does this action need a destination node (navigate / overlay / scroll-to)? */
+function needsDestination(action: ProtoAction): boolean {
+  return action === 'navigate' || action === 'overlay' || action === 'scroll-to';
+}
+
+/** Human trigger text for an interaction summary row. */
+function triggerSummary(ix: IrisInteraction): string {
+  if (ix.trigger === 'keydown') return `On key (${ix.key ?? '—'})`;
+  if (ix.trigger === 'delay') return `After ${ix.delayMs} ms`;
+  return TRIGGER_LABELS[ix.trigger];
+}
+
+/** Tail of a summary row: destination / URL value, or a red "None" when missing. */
+function interactionTail(doc: IrisDoc, ix: IrisInteraction): { text: string; missing: boolean } {
+  if (ix.action === 'url') {
+    return ix.url ? { text: ix.url, missing: false } : { text: 'None', missing: true };
+  }
+  if (!needsDestination(ix.action)) return { text: '', missing: false };
+  const dest = ix.destinationId ? doc.nodesById[ix.destinationId] : undefined;
+  return dest ? { text: `“${dest.name}”`, missing: false } : { text: 'None', missing: true };
+}
+
+/** Read-only input that binds the next non-modifier keypress (Escape clears). */
+function KeyCapture({ value, onChange }: { value: string | null; onChange: (key: string | null) => void }) {
+  return (
+    <input
+      className="iris-input"
+      readOnly
+      value={value ?? ''}
+      placeholder="Press a key"
+      aria-label="Interaction key"
+      title="Press any key to bind — Escape clears"
+      onKeyDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === 'Escape') onChange(null);
+        else if (!['Shift', 'Control', 'Alt', 'Meta', 'Tab'].includes(e.key)) onChange(e.key);
+      }}
+    />
+  );
+}
+
+/** Compact interaction summary row: click to select (expand), trash to remove. */
+function InteractionRow({ node, ix, active }: { node: IrisNode; ix: IrisInteraction; active: boolean }) {
+  const doc = useIris((s) => s.doc);
+  const removeInteraction = useIris((s) => s.removeInteraction);
+  const setActiveInteractionId = useIris((s) => s.setActiveInteractionId);
+  const tail = interactionTail(doc, ix);
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        className={cn(
+          'flex h-8 min-w-0 flex-1 items-center rounded-md border px-2.5 text-left text-[11px] transition-colors',
+          active
+            ? 'border-[#0D99FF] bg-[rgba(13,153,255,0.08)] text-white'
+            : 'border-[#3E3E3E] bg-[#1E1E1E] text-[#E5E5E5] hover:border-[#0D99FF]',
+        )}
+        aria-pressed={active}
+        title={`${triggerSummary(ix)} → ${ACTION_LABELS[ix.action]}${tail.text ? ` ${tail.text}` : ''}`}
+        onClick={() => setActiveInteractionId(active ? null : ix.id)}
+      >
+        <span className="truncate">
+          {triggerSummary(ix)}
+          <span className="text-[#6F6F6F]" aria-hidden>
+            {' '}
+            →{' '}
+          </span>
+          {ACTION_LABELS[ix.action]}
+          {tail.text ? (
+            tail.missing ? (
+              <span className="text-[#F24822]"> {tail.text}</span>
+            ) : (
+              <span> {tail.text}</span>
+            )
+          ) : null}
+        </span>
+      </button>
+      <button
+        type="button"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#9A9A9A] transition-colors hover:bg-[#383838] hover:text-[#F24822]"
+        aria-label={`Remove interaction: ${ACTION_LABELS[ix.action]}`}
+        title="Remove interaction"
+        onClick={(e) => {
+          e.stopPropagation();
+          removeInteraction(node.id, ix.id);
+        }}
+      >
+        <Trash2 size={12} strokeWidth={1.75} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+/** Figma-style "Interaction details" card for the active interaction.
+ *  Remounts per interaction (keyed by ix.id), so uncontrolled inputs below
+ *  always start from the current interaction value. */
+function InteractionDetails({ node, ix }: { node: IrisNode; ix: IrisInteraction }) {
+  const doc = useIris((s) => s.doc);
+  const currentPageId = useIris((s) => s.currentPageId);
+  const updateInteraction = useIris((s) => s.updateInteraction);
+  const set = (patch: Partial<IrisInteraction>): void => updateInteraction(node.id, ix.id, patch);
+
+  /* destination options: top-level frames (label w/ size); in scroll-to mode
+     also their direct children, one level deep, prefixed with ↳ */
+  const scrollMode = ix.action === 'scroll-to';
+  const destOptions: { id: ID; label: string }[] = [];
+  for (const f of pageFrames(doc, currentPageId)) {
+    destOptions.push({ id: f.id, label: `${f.name} (${Math.round(f.w)}×${Math.round(f.h)})` });
+    if (scrollMode) {
+      for (const childId of f.children) {
+        const c = doc.nodesById[childId];
+        if (c) destOptions.push({ id: c.id, label: `↳ ${c.name}` });
+      }
+    }
+  }
+  /* keep a deeper/legacy destination selectable */
+  const currentDest = ix.destinationId ? doc.nodesById[ix.destinationId] : undefined;
+  if (currentDest && !destOptions.some((o) => o.id === currentDest.id)) {
+    destOptions.push({ id: currentDest.id, label: currentDest.name });
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-2 rounded-lg border border-[#3E3E3E] bg-[#1E1E1E] p-2.5">
+      {/* 1 · trigger */}
+      <div>
+        <RowLabel>Trigger</RowLabel>
+        <select
+          className="iris-select"
+          aria-label="Interaction trigger"
+          value={ix.trigger}
+          onChange={(e) => set({ trigger: e.target.value as ProtoTrigger })}
+        >
+          {PROTO_TRIGGERS.map((t) => (
+            <option key={t} value={t}>
+              {TRIGGER_LABELS[t]}
+            </option>
+          ))}
+        </select>
+        {ix.trigger === 'keydown' ? (
+          <div className="mt-1.5">
+            <KeyCapture value={ix.key} onChange={(key) => set({ key })} />
+          </div>
+        ) : null}
+        {ix.trigger === 'delay' ? (
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <NumberField
+              value={ix.delayMs}
+              min={0}
+              max={60000}
+              step={50}
+              icon={<span className="text-[10px] font-semibold">ms</span>}
+              ariaLabel="Trigger delay in milliseconds"
+              onChange={(v) => set({ delayMs: v })}
+            />
+            <span className="shrink-0 text-[10px] text-[#6F6F6F]">delay</span>
+          </div>
+        ) : null}
+      </div>
+
+      {/* 2 · action */}
+      <div>
+        <RowLabel>Action</RowLabel>
+        <select
+          className="iris-select"
+          aria-label="Interaction action"
+          value={ix.action}
+          onChange={(e) => set({ action: e.target.value as ProtoAction })}
+        >
+          {PROTO_ACTIONS.map((a) => (
+            <option key={a} value={a}>
+              {ACTION_LABELS[a]}
+            </option>
+          ))}
+        </select>
+        {ix.action === 'url' ? (
+          <input
+            className="iris-input mt-1.5"
+            defaultValue={ix.url ?? ''}
+            placeholder="https://"
+            aria-label="Interaction URL"
+            spellCheck={false}
+            onBlur={(e) => {
+              const v = e.target.value.trim();
+              if (v !== (ix.url ?? '')) set({ url: v || null });
+            }}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+            }}
+          />
+        ) : null}
+      </div>
+
+      {/* 3 · destination */}
+      {needsDestination(ix.action) ? (
+        <div>
+          <RowLabel>{scrollMode ? 'Target' : 'Destination'}</RowLabel>
+          <select
+            className="iris-select"
+            aria-label={scrollMode ? 'Scroll target' : 'Destination frame'}
+            value={ix.destinationId ?? ''}
+            onChange={(e) => set({ destinationId: e.target.value || null })}
+          >
+            <option value="">None</option>
+            {destOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      {/* 4 · overlay settings */}
+      {ix.action === 'overlay' ? (
+        <div className="flex flex-col gap-2">
+          <div>
+            <RowLabel>Position</RowLabel>
+            <select
+              className="iris-select"
+              aria-label="Overlay position"
+              value={ix.overlayPos}
+              onChange={(e) => set({ overlayPos: e.target.value as OverlayPosition })}
+            >
+              {OVERLAY_POSITIONS.map((p) => (
+                <option key={p} value={p}>
+                  {OVERLAY_POS_LABELS[p]}
+                </option>
+              ))}
+            </select>
+          </div>
+          {ix.overlayPos === 'manual' ? (
+            <div className="grid grid-cols-2 gap-1.5">
+              <NumberField
+                value={ix.overlayX}
+                icon={<span className="text-[10px] font-semibold">X</span>}
+                ariaLabel="Overlay X offset"
+                onChange={(v) => set({ overlayX: v })}
+              />
+              <NumberField
+                value={ix.overlayY}
+                icon={<span className="text-[10px] font-semibold">Y</span>}
+                ariaLabel="Overlay Y offset"
+                onChange={(v) => set({ overlayY: v })}
+              />
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-[#C9C9C9]">Close when clicking outside</span>
+            <Switch
+              checked={ix.overlayCloseOutside}
+              aria-label="Close overlay when clicking outside"
+              className="data-[state=checked]:bg-[#0D99FF] data-[state=unchecked]:bg-[#383838]"
+              onCheckedChange={(v) => set({ overlayCloseOutside: v })}
+            />
+          </div>
+          <div>
+            <RowLabel>Background</RowLabel>
+            <ColorField
+              value={ix.overlayBg}
+              ariaLabel="Overlay background"
+              onChange={(v) => set({ overlayBg: v })}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {/* 5 · animation */}
+      <div>
+        <RowLabel>Animation</RowLabel>
+        <select
+          className="iris-select"
+          aria-label="Transition animation"
+          value={ix.animation}
+          onChange={(e) => set({ animation: e.target.value as ProtoAnimation })}
+        >
+          {PROTO_ANIMATIONS.map((a) => (
+            <option key={a} value={a}>
+              {ANIMATION_LABELS[a]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* 6 · duration + easing (hidden for instant transitions) */}
+      {ix.animation !== 'instant' ? (
+        <div>
+          <RowLabel>Duration</RowLabel>
+          <div className="grid grid-cols-2 gap-1.5">
+            <NumberField
+              value={ix.durationMs}
+              min={0}
+              max={10000}
+              step={50}
+              icon={<span className="text-[10px] font-semibold">ms</span>}
+              ariaLabel="Animation duration in milliseconds"
+              onChange={(v) => set({ durationMs: v })}
+            />
+            <select
+              className="iris-select"
+              aria-label="Easing"
+              value={ix.easing}
+              onChange={(e) => set({ easing: e.target.value as ProtoEasing })}
+            >
+              {PROTO_EASINGS.map((es) => (
+                <option key={es} value={es}>
+                  {EASING_LABELS[es]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Prototype "Interactions" section for the single selected node. */
+function InteractionsSection({ node }: { node: IrisNode }) {
+  const addInteraction = useIris((s) => s.addInteraction);
+  const activeInteractionId = useIris((s) => s.activeInteractionId);
+  const active = node.interactions.find((ix) => ix.id === activeInteractionId) ?? null;
+
+  return (
+    <Section
+      title="Interactions"
+      action={<IconBtn label="Add interaction" Icon={Plus} onClick={() => addInteraction(node.id)} />}
+    >
+      {node.interactions.length === 0 ? (
+        <p className="text-[11px] leading-5 text-[#6F6F6F]">
+          No interactions yet. Drag the connector node on canvas, or press + to add one.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {node.interactions.map((ix) => (
+            <InteractionRow key={ix.id} node={node} ix={ix} active={ix.id === activeInteractionId} />
+          ))}
+        </div>
+      )}
+      {active ? <InteractionDetails key={active.id} node={node} ix={active} /> : null}
+    </Section>
+  );
+}
+
+/** Prototype "Flow" section: starting point of the selected top-level frame
+ *  plus every flow on the current page. */
+function FlowSection() {
+  const doc = useIris((s) => s.doc);
+  const currentPageId = useIris((s) => s.currentPageId);
+  const nodes = useSelectedNodes();
+  const setFlowStart = useIris((s) => s.setFlowStart);
+  const removeFlow = useIris((s) => s.removeFlow);
+  const renameFlow = useIris((s) => s.renameFlow);
+  const setSelection = useIris((s) => s.setSelection);
+  const setPresenting = useIris((s) => s.setPresenting);
+
+  const single = nodes.length === 1 ? nodes[0] : null;
+  const isTopFrame = !!single && single.type === 'frame' && single.parentId === null;
+  const flows = doc.flows.filter((f) => f.pageId === currentPageId);
+  const ownFlow = isTopFrame && single ? flows.find((f) => f.startNodeId === single.id) : undefined;
+
+  return (
+    <Section title="Flow">
+      {isTopFrame && single ? (
+        ownFlow ? (
+          <div className="mb-2 flex flex-col gap-1">
+            <input
+              key={ownFlow.id}
+              className="h-7 w-full rounded-md border border-[#3E3E3E] bg-[#1E1E1E] px-2 text-[11px] text-[#E5E5E5] outline-none focus:border-[#0D99FF]"
+              defaultValue={ownFlow.name}
+              aria-label="Flow name"
+              spellCheck={false}
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                if (v && v !== ownFlow.name) renameFlow(ownFlow.id, v);
+                else e.target.value = ownFlow.name;
+              }}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                  (e.target as HTMLInputElement).blur();
+                } else if (e.key === 'Escape') {
+                  e.currentTarget.value = ownFlow.name;
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+            />
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-[10px] text-[#6F6F6F]">
+                <Play size={10} strokeWidth={0} fill="currentColor" className="text-[#0D99FF]" aria-hidden />
+                Flow starting point
+              </span>
+              <button
+                type="button"
+                className="text-[11px] text-[#9A9A9A] transition-colors hover:text-[#F24822]"
+                aria-label={`Remove flow ${ownFlow.name}`}
+                onClick={() => removeFlow(ownFlow.id)}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="mb-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[#3E3E3E] bg-[#1E1E1E] text-[11px] text-[#E5E5E5] transition-colors hover:border-[#0D99FF]"
+            onClick={() => setFlowStart(single.id)}
+          >
+            <Plus size={12} strokeWidth={2} aria-hidden />
+            Set as starting point
+          </button>
+        )
+      ) : null}
+
+      {flows.length === 0 ? (
+        <p className="text-[11px] leading-5 text-[#6F6F6F]">
+          No flows yet. Select a top-level frame and set it as a starting point.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {flows.map((flow) => {
+            const startFrame = doc.nodesById[flow.startNodeId];
+            return (
+              <div key={flow.id} className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-left text-[11px] text-[#E5E5E5] transition-colors hover:bg-[#383838]"
+                  title={`Select ${startFrame?.name ?? 'start frame'}`}
+                  aria-label={`Flow ${flow.name} — select start frame ${startFrame?.name ?? ''}`.trim()}
+                  onClick={() => setSelection([flow.startNodeId])}
+                >
+                  <Play
+                    size={10}
+                    strokeWidth={0}
+                    fill="currentColor"
+                    className="shrink-0 text-[#0D99FF]"
+                    aria-hidden
+                  />
+                  <span className="shrink-0 truncate font-medium">{flow.name}</span>
+                  {startFrame ? <span className="min-w-0 truncate text-[10px] text-[#6F6F6F]">{startFrame.name}</span> : null}
+                </button>
+                <IconBtn
+                  label={`Present flow ${flow.name}`}
+                  Icon={Play}
+                  onClick={() => setPresenting(true, flow.startNodeId)}
+                />
+                <button
+                  type="button"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#9A9A9A] transition-colors hover:bg-[#383838] hover:text-[#F24822]"
+                  aria-label={`Remove flow ${flow.name}`}
+                  title="Remove flow"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeFlow(flow.id);
+                  }}
+                >
+                  <Trash2 size={12} strokeWidth={1.75} aria-hidden />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+/** Prototype "Present" section: launch presentation + connection visibility. */
+function PresentSection() {
   const doc = useIris((s) => s.doc);
   const currentPageId = useIris((s) => s.currentPageId);
   const setPresenting = useIris((s) => s.setPresenting);
-  const page = doc.pagesById[currentPageId];
-  const frames = (page?.nodeIds ?? [])
-    .map((id) => doc.nodesById[id])
-    .filter((n): n is NonNullable<typeof n> => !!n && n.type === 'frame');
+  const connections = useIris((s) => s.viewFlags.connections);
+  const setViewFlag = useIris((s) => s.setViewFlag);
+  const firstFlow = doc.flows.find((f) => f.pageId === currentPageId);
+
+  return (
+    <Section title="Present">
+      <button
+        type="button"
+        className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#0D99FF] text-[12px] font-semibold text-white transition-colors hover:bg-[#0B87E0]"
+        onClick={() => setPresenting(true, firstFlow?.startNodeId ?? null)}
+      >
+        <Play size={13} strokeWidth={2.2} aria-hidden />
+        Present
+      </button>
+      <p className="mt-2 text-[10px] leading-4 text-[#6F6F6F]">
+        Play your prototype: click hotspots to navigate. Esc exits, R restarts. Ctrl+Enter anywhere.
+      </p>
+      <div className="mt-2.5 flex items-center justify-between">
+        <span className="text-[11px] text-[#C9C9C9]">
+          Show connections <span className="text-[10px] text-[#6F6F6F]">· Shift+E</span>
+        </span>
+        <Switch
+          checked={connections}
+          aria-label="Show prototype connections"
+          className="data-[state=checked]:bg-[#0D99FF] data-[state=unchecked]:bg-[#383838]"
+          onCheckedChange={(v) => setViewFlag('connections', v)}
+        />
+      </div>
+    </Section>
+  );
+}
+
+/** Prototype tab: interactions on the selection + flows + presenting. */
+function PrototypeTab() {
+  const nodes = useSelectedNodes();
+  const single = nodes.length === 1 ? nodes[0] : null;
 
   return (
     <div className="iris-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <Section title="Prototype">
-        <button
-          type="button"
-          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#0D99FF] text-[12px] font-semibold text-white transition-colors hover:bg-[#0B87E0]"
-          onClick={() => setPresenting(true)}
-        >
-          <Play size={13} strokeWidth={2.2} aria-hidden />
-          Present {frames.length > 0 ? `(${frames.length} frame${frames.length === 1 ? '' : 's'})` : ''}
-        </button>
-        <p className="mt-2 text-[10px] leading-4 text-[#6F6F6F]">
-          Present your frames full-screen. Use ← → to move between frames, Esc to exit. Also
-          Ctrl+Enter anywhere.
-        </p>
-      </Section>
-      <Section title="Flow">
-        {frames.length === 0 ? (
-          <p className="text-[11px] leading-5 text-[#6F6F6F]">
-            No frames on this page yet. Press F and drag to create your first screen.
-          </p>
-        ) : (
-          <ol className="flex flex-col gap-1">
-            {frames.map((f, i) => (
-              <li
-                key={f.id}
-                className="flex h-8 items-center gap-2 rounded-md border border-[#3E3E3E] bg-[#1E1E1E] px-2.5 text-[11px] text-[#E5E5E5]"
-              >
-                <span className="flex h-5 w-5 items-center justify-center rounded bg-[#252525] text-[9px] text-[#9A9A9A]">
-                  {i + 1}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{f.name}</span>
-                <span className="text-[10px] text-[#6F6F6F]">
-                  {Math.round(f.w)}×{Math.round(f.h)}
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </Section>
+      {single ? (
+        <InteractionsSection node={single} />
+      ) : (
+        <Section>
+          <p className="text-[11px] leading-5 text-[#6F6F6F]">Select a layer to author interactions.</p>
+        </Section>
+      )}
+      <FlowSection />
+      <PresentSection />
     </div>
   );
 }

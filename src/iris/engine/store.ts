@@ -11,15 +11,19 @@ import {
   ID,
   IrisComment,
   IrisDoc,
+  IrisFlow,
+  IrisInteraction,
   IrisNode,
   NodeType,
   FramePreset,
   AutoLayout,
   AxisSizing,
   createDefaultDoc,
+  createInteraction,
   createNode,
   createPage,
   nextName,
+  uid,
   normalizeDoc,
   collectSubtree,
   isDescendantOf,
@@ -110,6 +114,16 @@ export interface ViewFlags {
   rulers: boolean;
   pixelGrid: boolean;
   outline: boolean;
+  /** prototype connection arrows + connector nodes (Shift+E) */
+  connections: boolean;
+}
+
+/** Ephemeral connector-drag state while authoring interactions on canvas. */
+export interface ConnectDrag {
+  hotspotId: ID;
+  fromW: { x: number; y: number };
+  toW: { x: number; y: number };
+  overFrameId: ID | null;
 }
 
 export type LeftPanelView = 'layers' | 'assets' | 'comments';
@@ -167,6 +181,14 @@ export interface IrisStore {
   rightTab: RightPanelTab;
   /** command palette (Ctrl+K) */
   paletteOpen: boolean;
+
+  /* prototype */
+  /** live connector drag (canvas authoring) */
+  connectDrag: ConnectDrag | null;
+  /** interaction row expanded in the Prototype tab */
+  activeInteractionId: ID | null;
+  /** frame to start presenting from (consumed by PresentationView) */
+  presentStartFrameId: ID | null;
 
   /* tool / view */
   setTool: (tool: Tool) => void;
@@ -284,8 +306,18 @@ export interface IrisStore {
   setActiveComment: (id: ID | null) => void;
   setShowComments: (v: boolean) => void;
 
+  /* prototype */
+  addInteraction: (nodeId: ID, patch?: Partial<IrisInteraction>) => ID;
+  updateInteraction: (nodeId: ID, ixId: ID, patch: Partial<IrisInteraction>) => void;
+  removeInteraction: (nodeId: ID, ixId: ID) => void;
+  setFlowStart: (frameId: ID) => void;
+  removeFlow: (flowId: ID) => void;
+  renameFlow: (flowId: ID, name: string) => void;
+  setConnectDrag: (d: ConnectDrag | null) => void;
+  setActiveInteractionId: (id: ID | null) => void;
+
   /* editor chrome */
-  setPresenting: (v: boolean) => void;
+  setPresenting: (v: boolean, startFrameId?: ID | null) => void;
   setInspectMode: (v: boolean) => void;
   setShareOpen: (v: boolean) => void;
   setLeftPanelView: (view: LeftPanelView, toggle?: boolean) => void;
@@ -328,6 +360,7 @@ function draftOf(doc: IrisDoc): IrisDoc {
       guidesY: [...doc.settings.guidesY],
     },
     comments: doc.comments ? doc.comments.map((c) => ({ ...c })) : [],
+    flows: doc.flows ? doc.flows.map((f) => ({ ...f })) : [],
   };
 }
 
@@ -603,7 +636,7 @@ export const useIris = create<IrisStore>()((set, get) => {
     editingTextId: null,
     editingPathId: null,
     hoverId: null,
-    viewFlags: { rulers: true, pixelGrid: true, outline: false },
+    viewFlags: { rulers: true, pixelGrid: true, outline: false, connections: true },
     past: [],
     future: [],
     clipboard: null,
@@ -624,6 +657,9 @@ export const useIris = create<IrisStore>()((set, get) => {
     showComments: true,
     rightTab: 'design',
     paletteOpen: false,
+    connectDrag: null,
+    activeInteractionId: null,
+    presentStartFrameId: null,
 
     setLeftPanelView: (view, toggle) =>
       set((s) => {
@@ -632,7 +668,10 @@ export const useIris = create<IrisStore>()((set, get) => {
       }),
     toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
     setRightTab: (tab) => set({ rightTab: tab }),
-    setPresenting: (v) => set({ presenting: v }),
+    setPresenting: (v, startFrameId) => {
+      if (v) set({ presenting: true, presentStartFrameId: startFrameId ?? null });
+      else set({ presenting: false, presentStartFrameId: null });
+    },
     setInspectMode: (v) => set({ inspectMode: v }),
     setShareOpen: (v) => set({ shareOpen: v }),
     setPaletteOpen: (v) => set({ paletteOpen: v }),
@@ -676,6 +715,88 @@ export const useIris = create<IrisStore>()((set, get) => {
     },
     setActiveComment: (id) => set({ activeCommentId: id }),
     setShowComments: (v) => set({ showComments: v }),
+
+    /* ---------------- prototype ---------------- */
+    addInteraction: (nodeId, patch) => {
+      const ix = createInteraction(patch);
+      commit(
+        (draft) => {
+          const n = draft.nodesById[nodeId];
+          if (n) putNode(draft, nodeId, { interactions: [...(n.interactions ?? []), ix] });
+        },
+        { history: 'interaction' },
+      );
+      set({ activeInteractionId: ix.id });
+      return ix.id;
+    },
+    updateInteraction: (nodeId, ixId, patch) => {
+      commit(
+        (draft) => {
+          const n = draft.nodesById[nodeId];
+          if (!n || !n.interactions) return;
+          const next = n.interactions.map((ix) => (ix.id === ixId ? { ...ix, ...patch } : ix));
+          putNode(draft, nodeId, { interactions: next });
+        },
+        { history: 'interaction' },
+      );
+    },
+    removeInteraction: (nodeId, ixId) => {
+      commit(
+        (draft) => {
+          const n = draft.nodesById[nodeId];
+          if (!n || !n.interactions) return;
+          putNode(draft, nodeId, { interactions: n.interactions.filter((ix) => ix.id !== ixId) });
+        },
+        { history: 'interaction' },
+      );
+      const s = get();
+      if (s.activeInteractionId === ixId) set({ activeInteractionId: null });
+    },
+    setFlowStart: (frameId) => {
+      const state = get();
+      const frame = state.doc.nodesById[frameId];
+      if (!frame) return;
+      if (state.doc.flows.some((f) => f.startNodeId === frameId)) {
+        get().toast(`"${frame.name}" is already a flow starting point`);
+        return;
+      }
+      const flow: IrisFlow = {
+        id: uid(),
+        name: `Flow ${state.doc.flows.filter((f) => f.pageId === frame.pageId).length + 1}`,
+        pageId: frame.pageId,
+        startNodeId: frameId,
+      };
+      commit(
+        (draft) => {
+          draft.flows = [...(draft.flows ?? []), flow];
+        },
+        { history: 'flow' },
+      );
+      get().toast(`Flow starting point set on "${frame.name}"`, {
+        label: 'Undo',
+        run: () => get().undo(),
+      });
+    },
+    removeFlow: (flowId) => {
+      commit(
+        (draft) => {
+          draft.flows = (draft.flows ?? []).filter((f) => f.id !== flowId);
+        },
+        { history: 'flow' },
+      );
+    },
+    renameFlow: (flowId, name) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      commit(
+        (draft) => {
+          draft.flows = (draft.flows ?? []).map((f) => (f.id === flowId ? { ...f, name: trimmed.slice(0, 64) } : f));
+        },
+        { history: false },
+      );
+    },
+    setConnectDrag: (d) => set({ connectDrag: d }),
+    setActiveInteractionId: (id) => set({ activeInteractionId: id }),
 
     /* ------------------------ frame presets ------------------------ */
     addFramePreset: (preset) => {
@@ -816,6 +937,7 @@ export const useIris = create<IrisStore>()((set, get) => {
           for (const nid of doomed) delete draft.nodesById[nid];
           draft.pages = remaining;
           delete draft.pagesById[id];
+          draft.flows = (draft.flows ?? []).filter((f) => f.pageId !== id);
         },
         { history: 'page', selection: [] },
       );
@@ -1081,6 +1203,19 @@ export const useIris = create<IrisStore>()((set, get) => {
             const n = draft.nodesById[nid];
             if (n) removeChildRef(draft, pageId, n.parentId, nid);
             delete draft.nodesById[nid];
+          }
+          // prototype hygiene: drop flows starting at deleted frames and
+          // detach interactions whose destination was deleted
+          draft.flows = (draft.flows ?? []).filter((f) => !doomed.has(f.startNodeId));
+          for (const n of Object.values(draft.nodesById)) {
+            if (!n.interactions?.length) continue;
+            if (n.interactions.some((ix) => ix.destinationId && doomed.has(ix.destinationId))) {
+              putNode(draft, n.id, {
+                interactions: n.interactions.map((ix) =>
+                  ix.destinationId && doomed.has(ix.destinationId) ? { ...ix, destinationId: null } : ix,
+                ),
+              });
+            }
           }
         },
         { history: 'delete', selection: [] },

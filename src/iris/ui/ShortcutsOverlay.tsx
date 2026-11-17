@@ -110,6 +110,17 @@ const GROUPS: ShortcutGroup[] = [
     ],
   },
   {
+    title: 'Prototype',
+    rows: [
+      { keys: ['Shift+E'], label: 'Show / hide connections' },
+      { keys: ['Drag connector node'], label: 'Connect layer to a frame' },
+      { keys: ['Ctrl+Enter'], label: 'Present prototype' },
+      { keys: ['R'], label: 'Restart (presenting)' },
+      { keys: ['Backspace'], label: 'Back (presenting)' },
+      { keys: ['Esc'], label: 'Exit presentation' },
+    ],
+  },
+  {
     title: 'Actions',
     rows: [
       { keys: ['Ctrl+K'], label: 'Search tools & commands' },

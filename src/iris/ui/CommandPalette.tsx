@@ -46,7 +46,9 @@ import {
   MessageCircle,
   Minus,
   MousePointer2,
+  MousePointerClick,
   MoveUpRight,
+  Play,
   Pencil,
   PenTool,
   Plus,
@@ -355,11 +357,57 @@ export function CommandPalette() {
     },
     {
       id: 'present',
-      label: 'Start presentation',
+      label: 'Present prototype',
       shortcut: 'Ctrl+Enter',
       Icon: Presentation,
       group: 'View',
-      run: () => s.setPresenting(true),
+      run: () => {
+        const st = useIris.getState();
+        const flow = (st.doc.flows ?? []).find(
+          (f) => f.pageId === st.currentPageId && st.doc.nodesById[f.startNodeId],
+        );
+        st.setPresenting(true, flow?.startNodeId ?? null);
+      },
+    },
+    {
+      id: 'connections',
+      label: 'Toggle prototype connections',
+      shortcut: 'Shift+E',
+      Icon: MousePointerClick,
+      group: 'Prototype',
+      run: () => s.setViewFlag('connections', !s.viewFlags.connections),
+    },
+    {
+      id: 'add-interaction',
+      label: 'Add interaction: On click → Navigate to',
+      Icon: Play,
+      group: 'Prototype',
+      run: () => {
+        const st = useIris.getState();
+        const first = st.selection[0];
+        if (!first || !st.doc.nodesById[first]) {
+          st.toast('Select a layer first');
+          return;
+        }
+        st.addInteraction(first);
+        st.setRightTab('prototype');
+      },
+    },
+    {
+      id: 'flow-start',
+      label: 'Set as flow starting point',
+      Icon: Frame,
+      group: 'Prototype',
+      run: () => {
+        const st = useIris.getState();
+        const first = st.selection[0];
+        const n = first ? st.doc.nodesById[first] : null;
+        if (!n || n.parentId !== null || n.type !== 'frame') {
+          st.toast('Select a top-level frame first');
+          return;
+        }
+        st.setFlowStart(n.id);
+      },
     },
     ...presets.map((p) => ({
       id: `preset-${p.id}`,

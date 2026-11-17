@@ -214,13 +214,14 @@ export function drawNodes(
   pageId: IrisDoc['pages'][number],
   alpha: number,
   ids?: ID[],
+  opts?: { skipChildren?: boolean },
 ): void {
   const page = doc.pagesById[pageId];
   if (!page) return;
   const targets: IrisNode[] = ids
     ? ids.map((id) => doc.nodesById[id]).filter((n): n is IrisNode => !!n && n.visible)
     : page.nodeIds.map((id) => doc.nodesById[id]).filter((n): n is IrisNode => !!n && n.visible);
-  for (const n of targets) drawNode(c, doc, n, alpha, IDENTITY);
+  for (const n of targets) drawNode(c, doc, n, alpha, IDENTITY, !!opts?.skipChildren);
 }
 
 function drawNode(
@@ -229,6 +230,7 @@ function drawNode(
   n: IrisNode,
   alpha: number,
   parentWorld: Mat,
+  skipChildren = false,
 ): void {
   if (!n.visible) return;
   const ga = alpha * n.opacity;
@@ -262,9 +264,11 @@ function drawNode(
   };
 
   if (n.type === 'group') {
-    for (const childId of n.children) {
-      const child = doc.nodesById[childId];
-      if (child) drawNode(c, doc, child, ga, world);
+    if (!skipChildren) {
+      for (const childId of n.children) {
+        const child = doc.nodesById[childId];
+        if (child) drawNode(c, doc, child, ga, world);
+      }
     }
     c.restore();
     return;
@@ -283,9 +287,11 @@ function drawNode(
       roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
       c.clip();
     }
-    for (const childId of n.children) {
-      const child = doc.nodesById[childId];
-      if (child) drawNode(c, doc, child, ga, world);
+    if (!skipChildren) {
+      for (const childId of n.children) {
+        const child = doc.nodesById[childId];
+        if (child) drawNode(c, doc, child, ga, world);
+      }
     }
     if (n.stroke && n.strokeWidth > 0) {
       roundRectPath(c, 0, 0, n.w, n.h, n.cornerRadius);
@@ -995,6 +1001,184 @@ function drawOverlay(c: CanvasRenderingContext2D, s: ReturnType<typeof useIris.g
     pts.forEach((p, i) => (i === 0 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y)));
     c.stroke();
     c.restore();
+  }
+
+  // prototype connections, flow chips + connector node
+  drawPrototypeOverlay(c, s, W, H);
+}
+
+/* ------------------------------------------------------------------ */
+/* Prototype overlay: connection arrows, flow chips, connector node   */
+/* ------------------------------------------------------------------ */
+
+const CONNECT_GRAY = '#9E9E9E';
+
+/** Right-center of a node's world AABB (connector anchor). */
+export function connectorAnchorWorld(doc: IrisDoc, n: IrisNode): { x: number; y: number } {
+  const box = nodeWorldAABB(doc, n);
+  return { x: box.x + box.w, y: box.y + box.h / 2 };
+}
+
+function edgeCenter(box: Rect, side: 'left' | 'right'): { x: number; y: number } {
+  return side === 'left'
+    ? { x: box.x, y: box.y + box.h / 2 }
+    : { x: box.x + box.w, y: box.y + box.h / 2 };
+}
+
+function drawArrowHead(c: CanvasRenderingContext2D, tip: Vec, dir: number, size: number, color: string): void {
+  c.fillStyle = color;
+  c.beginPath();
+  c.moveTo(tip.x, tip.y);
+  c.lineTo(tip.x - size * Math.cos(dir - 0.42), tip.y - size * Math.sin(dir - 0.42));
+  c.lineTo(tip.x - size * Math.cos(dir + 0.42), tip.y - size * Math.sin(dir + 0.42));
+  c.closePath();
+  c.fill();
+}
+
+function drawPrototypeOverlay(
+  c: CanvasRenderingContext2D,
+  s: ReturnType<typeof useIris.getState>,
+  W: number,
+  H: number,
+): void {
+  if (!s.viewFlags.connections || s.presenting) return;
+  const vp = s.viewport;
+  const doc = s.doc;
+  const page = doc.pagesById[s.currentPageId];
+  if (!page) return;
+  const toScreen = (p: { x: number; y: number }): Vec => worldToScreen(vp, p.x, p.y);
+
+  /* connection arrows: hotspot → destination (top-level frames or nodes) */
+  const drawConnection = (hot: IrisNode, destId: ID, active: boolean): void => {
+    const dest = doc.nodesById[destId];
+    if (!dest || dest.id === hot.id) return;
+    const hb = nodeWorldAABB(doc, hot);
+    const db = nodeWorldAABB(doc, dest);
+    const color = active ? ACCENT : CONNECT_GRAY;
+    const fromRight = db.x + db.w / 2 >= hb.x + hb.w / 2;
+    const from = toScreen(edgeCenter(hb, fromRight ? 'right' : 'left'));
+    const to = toScreen(edgeCenter(db, fromRight ? 'left' : 'right'));
+    const ang = Math.atan2(to.y - from.y, to.x - from.x);
+    const head = 7;
+    const end = { x: to.x - Math.cos(ang) * head * 0.9, y: to.y - Math.sin(ang) * head * 0.9 };
+    c.strokeStyle = color;
+    c.lineWidth = 1.5;
+    c.setLineDash([]);
+    c.beginPath();
+    c.moveTo(from.x, from.y);
+    c.lineTo(end.x, end.y);
+    c.stroke();
+    drawArrowHead(c, to, ang, head, color);
+  };
+
+  for (const n of Object.values(doc.nodesById)) {
+    if (n.pageId !== s.currentPageId || !n.visible || !n.interactions?.length) continue;
+    const active = s.selection.includes(n.id) || s.hoverId === n.id;
+    for (const ix of n.interactions) {
+      if (!ix.destinationId) continue;
+      drawConnection(n, ix.destinationId, active);
+    }
+  }
+
+  /* flow starting point chips (▶ name) above the start frame */
+  for (const flow of doc.flows ?? []) {
+    if (flow.pageId !== s.currentPageId) continue;
+    const f = doc.nodesById[flow.startNodeId];
+    if (!f || !f.visible) continue;
+    const box = nodeWorldAABB(doc, f);
+    const x = box.x * vp.zoom + vp.x;
+    const y = box.y * vp.zoom + vp.y - 26;
+    if (x > W || y > H || x < -260) continue;
+    c.font = '600 10px Inter, system-ui, sans-serif';
+    c.textAlign = 'left';
+    c.textBaseline = 'middle';
+    const label = flow.name;
+    const tw = c.measureText(label).width;
+    const padX = 8;
+    const w = tw + 22;
+    const h = 16;
+    c.fillStyle = 'rgba(56,56,56,0.95)';
+    c.strokeStyle = '#4E4E4E';
+    c.lineWidth = 1;
+    c.beginPath();
+    c.roundRect(x, y, w, h, 4);
+    c.fill();
+    c.stroke();
+    // play triangle
+    c.fillStyle = '#E5E5E5';
+    c.beginPath();
+    c.moveTo(x + 7, y + 4.5);
+    c.lineTo(x + 7, y + 11.5);
+    c.lineTo(x + 13, y + 8);
+    c.closePath();
+    c.fill();
+    c.fillStyle = '#E5E5E5';
+    c.fillText(label, x + 16, y + h / 2 + 0.5);
+    c.textBaseline = 'alphabetic';
+  }
+
+  /* connector node on the single selection (prototype authoring handle) */
+  const single = s.selection.length === 1 ? doc.nodesById[s.selection[0]] : null;
+  const showHandle =
+    single &&
+    (s.tool === 'move' || s.rightTab === 'prototype') &&
+    !s.editingTextId &&
+    !s.editingPathId;
+  if (showHandle && single) {
+    const anchor = connectorAnchorWorld(doc, single);
+    const pos = toScreen(anchor);
+    const r = overlay.connectorHot ? 8 : 6.5;
+    c.setLineDash([]);
+    c.fillStyle = '#FFFFFF';
+    c.strokeStyle = overlay.connectorHot ? ACCENT : CONNECT_GRAY;
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
+    // tiny arrow glyph
+    c.strokeStyle = overlay.connectorHot ? ACCENT : '#6F6F6F';
+    c.lineWidth = 1.2;
+    const g = r * 0.42;
+    c.beginPath();
+    c.moveTo(pos.x - g, pos.y);
+    c.lineTo(pos.x + g * 0.7, pos.y);
+    c.moveTo(pos.x + g * 0.1, pos.y - g * 0.7);
+    c.lineTo(pos.x + g * 0.7, pos.y);
+    c.lineTo(pos.x + g * 0.1, pos.y + g * 0.7);
+    c.stroke();
+  }
+
+  /* live connector drag + destination highlight */
+  const cd = overlay.connectDrag;
+  if (cd) {
+    if (cd.overFrameId) {
+      const dest = doc.nodesById[cd.overFrameId];
+      if (dest) {
+        const b = nodeWorldAABB(doc, dest);
+        const p = toScreen({ x: b.x, y: b.y });
+        c.fillStyle = 'rgba(13,153,255,0.08)';
+        c.strokeStyle = ACCENT;
+        c.lineWidth = 1.5;
+        c.setLineDash([]);
+        c.fillRect(p.x, p.y, b.w * vp.zoom, b.h * vp.zoom);
+        c.strokeRect(p.x, p.y, b.w * vp.zoom, b.h * vp.zoom);
+      }
+    }
+    const from = toScreen(cd.fromW);
+    const to = toScreen(cd.toW);
+    c.strokeStyle = ACCENT;
+    c.lineWidth = 1.5;
+    c.setLineDash([5, 4]);
+    c.beginPath();
+    c.moveTo(from.x, from.y);
+    c.lineTo(to.x, to.y);
+    c.stroke();
+    c.setLineDash([]);
+    c.fillStyle = ACCENT;
+    c.beginPath();
+    c.arc(to.x, to.y, 4, 0, Math.PI * 2);
+    c.fill();
   }
 }
 

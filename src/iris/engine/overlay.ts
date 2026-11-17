@@ -49,6 +49,17 @@ export interface LayoutDrag {
   left: boolean;
 }
 
+/** Live prototype-connector drag (hotspot → candidate destination). */
+export interface ConnectDrag {
+  hotspotId: ID;
+  /** world-space anchor on the hotspot's right edge */
+  fromW: { x: number; y: number };
+  /** world-space cursor */
+  toW: { x: number; y: number };
+  /** top-level frame currently under the cursor (valid drop target) */
+  overFrameId: ID | null;
+}
+
 export interface OverlayState {
   marquee: Rect | null;
   guides: SnapGuide[];
@@ -68,6 +79,10 @@ export interface OverlayState {
   pickedColor: string | null;
   /** active auto-layout reorder drag */
   layoutDrag: LayoutDrag | null;
+  /** active prototype connector drag */
+  connectDrag: ConnectDrag | null;
+  /** pointer hovering the connector node of the current selection */
+  connectorHot: boolean;
 }
 
 export const overlay: OverlayState = {
@@ -85,6 +100,8 @@ export const overlay: OverlayState = {
   guideDrag: null,
   pickedColor: null,
   layoutDrag: null,
+  connectDrag: null,
+  connectorHot: false,
 };
 
 export function clearTransient(): void {
@@ -93,4 +110,6 @@ export function clearTransient(): void {
   overlay.dragBadge = null;
   overlay.guideDrag = null;
   overlay.layoutDrag = null;
+  overlay.connectDrag = null;
+  overlay.connectorHot = false;
 }

@@ -50,6 +50,216 @@ export interface AutoLayout {
 /** Per-axis sizing behavior (frames with layout, children of a layout parent). */
 export type AxisSizing = 'fixed' | 'hug' | 'fill';
 
+/* ------------------------------------------------------------------ */
+/* Prototyping (field guide §5)                                        */
+/* ------------------------------------------------------------------ */
+
+/** What fires an interaction. */
+export type ProtoTrigger = 'click' | 'hover' | 'press' | 'keydown' | 'delay';
+
+/** What the interaction does when it fires. */
+export type ProtoAction =
+  | 'navigate' /** go to the destination frame */
+  | 'back' /** return to the previous screen */
+  | 'url' /** open an external link */
+  | 'overlay' /** show the destination frame on top of the current screen */
+  | 'close-overlay' /** dismiss the open overlay */
+  | 'scroll-to'; /** scroll a frame to reveal the destination node */
+
+/** Screen-to-screen transition (playback). */
+export type ProtoAnimation =
+  | 'instant'
+  | 'dissolve'
+  | 'smart-animate'
+  | 'slide-left'
+  | 'slide-right'
+  | 'slide-up'
+  | 'slide-down'
+  | 'move-in-left'
+  | 'move-in-right'
+  | 'move-in-top'
+  | 'move-in-bottom'
+  | 'move-out-left'
+  | 'move-out-right'
+  | 'move-out-top'
+  | 'move-out-bottom'
+  | 'push-left'
+  | 'push-right'
+  | 'push-up'
+  | 'push-down';
+
+export type ProtoEasing = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'spring';
+
+/** Where an overlay frame lands over the base screen. */
+export type OverlayPosition =
+  | 'center'
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right'
+  | 'manual';
+
+/** One prototype interaction (hotspot → trigger → action). */
+export interface IrisInteraction {
+  id: ID;
+  trigger: ProtoTrigger;
+  /** key name for the keydown trigger (e.g. "a", "Enter") */
+  key: string | null;
+  /** milliseconds for the delay trigger */
+  delayMs: number;
+  action: ProtoAction;
+  /** destination frame (navigate / overlay) or target node (scroll-to) */
+  destinationId: ID | null;
+  /** external link for the url action */
+  url: string | null;
+  overlayPos: OverlayPosition;
+  /** manual overlay offsets from the centered position */
+  overlayX: number;
+  overlayY: number;
+  /** clicking outside the overlay closes it */
+  overlayCloseOutside: boolean;
+  /** backdrop color behind the overlay (null = default) */
+  overlayBg: string | null;
+  animation: ProtoAnimation;
+  durationMs: number;
+  easing: ProtoEasing;
+}
+
+/** A named user journey with an entry screen. */
+export interface IrisFlow {
+  id: ID;
+  name: string;
+  pageId: ID;
+  /** entry frame (top-level) */
+  startNodeId: ID;
+}
+
+/** Frame scroll behavior in prototypes (design-time clipping uses `clip`). */
+export type FrameOverflow = 'visible' | 'hidden' | 'scroll';
+
+export const PROTO_TRIGGERS: ProtoTrigger[] = ['click', 'hover', 'press', 'keydown', 'delay'];
+export const PROTO_ACTIONS: ProtoAction[] = [
+  'navigate',
+  'back',
+  'url',
+  'overlay',
+  'close-overlay',
+  'scroll-to',
+];
+export const PROTO_ANIMATIONS: ProtoAnimation[] = [
+  'instant',
+  'dissolve',
+  'smart-animate',
+  'slide-left',
+  'slide-right',
+  'slide-up',
+  'slide-down',
+  'move-in-left',
+  'move-in-right',
+  'move-in-top',
+  'move-in-bottom',
+  'move-out-left',
+  'move-out-right',
+  'move-out-top',
+  'move-out-bottom',
+  'push-left',
+  'push-right',
+  'push-up',
+  'push-down',
+];
+export const PROTO_EASINGS: ProtoEasing[] = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'spring'];
+export const OVERLAY_POSITIONS: OverlayPosition[] = [
+  'center',
+  'top-left',
+  'top-center',
+  'top-right',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right',
+  'manual',
+];
+
+/** Default interaction: On click → Navigate to (no destination yet). */
+export function createInteraction(patch: Partial<IrisInteraction> = {}): IrisInteraction {
+  return {
+    id: patch.id ?? uid(),
+    trigger: 'click',
+    key: null,
+    delayMs: 800,
+    action: 'navigate',
+    destinationId: null,
+    url: null,
+    overlayPos: 'center',
+    overlayX: 0,
+    overlayY: 0,
+    overlayCloseOutside: true,
+    overlayBg: 'rgba(0,0,0,0.30)',
+    animation: 'instant',
+    durationMs: 300,
+    easing: 'ease-out',
+    ...patch,
+  };
+}
+
+/** Sanitize an unknown payload into valid interactions (load-time). */
+function normalizeInteractions(raw: unknown): IrisInteraction[] {
+  if (!Array.isArray(raw)) return [];
+  const out: IrisInteraction[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const r = item as Partial<IrisInteraction>;
+    const num = (v: unknown, d: number, min: number, max: number): number =>
+      typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : d;
+    out.push(
+      createInteraction({
+        id: typeof r.id === 'string' ? r.id : uid(),
+        trigger: PROTO_TRIGGERS.includes(r.trigger as ProtoTrigger) ? (r.trigger as ProtoTrigger) : 'click',
+        key: typeof r.key === 'string' ? r.key.slice(0, 32) : null,
+        delayMs: num(r.delayMs, 800, 0, 60000),
+        action: PROTO_ACTIONS.includes(r.action as ProtoAction) ? (r.action as ProtoAction) : 'navigate',
+        destinationId: typeof r.destinationId === 'string' ? r.destinationId : null,
+        url: typeof r.url === 'string' ? r.url.slice(0, 512) : null,
+        overlayPos: OVERLAY_POSITIONS.includes(r.overlayPos as OverlayPosition)
+          ? (r.overlayPos as OverlayPosition)
+          : 'center',
+        overlayX: num(r.overlayX, 0, -100000, 100000),
+        overlayY: num(r.overlayY, 0, -100000, 100000),
+        overlayCloseOutside: r.overlayCloseOutside !== false,
+        overlayBg: typeof r.overlayBg === 'string' ? r.overlayBg.slice(0, 64) : null,
+        animation: PROTO_ANIMATIONS.includes(r.animation as ProtoAnimation)
+          ? (r.animation as ProtoAnimation)
+          : 'instant',
+        durationMs: num(r.durationMs, 300, 0, 10000),
+        easing: PROTO_EASINGS.includes(r.easing as ProtoEasing) ? (r.easing as ProtoEasing) : 'ease-out',
+      }),
+    );
+  }
+  return out;
+}
+
+/** Sanitize flows (load-time); requires resolved pages + nodes. */
+function normalizeFlows(raw: unknown, doc: IrisDoc): IrisFlow[] {
+  if (!Array.isArray(raw)) return [];
+  const out: IrisFlow[] = [];
+  let n = 0;
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const r = item as Partial<IrisFlow>;
+    if (typeof r.startNodeId !== 'string' || !doc.nodesById[r.startNodeId]) continue;
+    const pageId = typeof r.pageId === 'string' && doc.pages.includes(r.pageId) ? r.pageId : doc.pages[0];
+    n += 1;
+    out.push({
+      id: typeof r.id === 'string' ? r.id : uid(),
+      name: typeof r.name === 'string' && r.name.trim() ? r.name.slice(0, 64) : `Flow ${n}`,
+      pageId,
+      startNodeId: r.startNodeId,
+    });
+  }
+  return out;
+}
+
 export const DEFAULT_AUTO_LAYOUT: AutoLayout = {
   mode: 'vertical',
   gap: 10,
@@ -198,6 +408,11 @@ export interface IrisNode {
   sizingH: AxisSizing;
   /** vertical sizing mode */
   sizingV: AxisSizing;
+  /* prototype */
+  /** prototype interactions authored on this layer (hotspots) */
+  interactions: IrisInteraction[];
+  /** frame overflow behavior in prototypes (frames only) */
+  overflow: FrameOverflow;
 }
 
 export interface IrisPage {
@@ -226,6 +441,8 @@ export interface IrisDoc {
   settings: DocSettings;
   /** canvas comment pins */
   comments: IrisComment[];
+  /** prototype flows on this document */
+  flows: IrisFlow[];
 }
 
 export const NODE_TYPE_LABEL: Record<NodeType, string> = {
@@ -327,7 +544,7 @@ export function uid(): ID {
 function defaultsFor(type: NodeType): Partial<IrisNode> {
   switch (type) {
     case 'frame':
-      return { w: 100, h: 100, fill: '#FFFFFF', clip: true, name: 'Frame' };
+      return { w: 100, h: 100, fill: '#FFFFFF', clip: true, overflow: 'hidden', name: 'Frame' };
     case 'group':
       return { w: 100, h: 100, fill: null, name: 'Group' };
     case 'rect':
@@ -443,6 +660,8 @@ export function createNode(
     layout: null,
     sizingH: 'fixed',
     sizingV: 'fixed',
+    interactions: [],
+    overflow: 'visible',
     ...defaultsFor(type),
     ...patch,
   };
@@ -461,6 +680,7 @@ export function createDefaultDoc(): IrisDoc {
     nodesById: {},
     settings: { ...DEFAULT_SETTINGS, grid: { ...DEFAULT_SETTINGS.grid }, guidesX: [], guidesY: [] },
     comments: [],
+    flows: [],
   };
 }
 
@@ -563,6 +783,7 @@ export function cloneSubtree(
     points: n.points.map((p) => ({ ...p })),
     fillGradient: n.fillGradient ? { ...n.fillGradient } : null,
     shadow: n.shadow ? { ...n.shadow } : null,
+    interactions: n.interactions ? n.interactions.map((ix) => ({ ...ix })) : [],
   }));
   return { nodes: cloned, rootId: idMap.get(rootId)! };
 }
@@ -637,6 +858,7 @@ export function normalizeDoc(raw: unknown): IrisDoc {
     nodesById: {},
     settings: normalizeSettings(src.settings),
     comments: [],
+    flows: [],
   };
   doc.comments = normalizeComments(src.comments, doc.pages);
   for (const p of Object.values(src.pagesById ?? {})) {
@@ -661,6 +883,10 @@ export function normalizeDoc(raw: unknown): IrisDoc {
     patch.layout = normalizeAutoLayout((n as { layout?: unknown }).layout);
     if (patch.sizingH !== 'fill' && patch.sizingH !== 'hug') patch.sizingH = 'fixed';
     if (patch.sizingV !== 'fill' && patch.sizingV !== 'hug') patch.sizingV = 'fixed';
+    patch.interactions = normalizeInteractions((n as { interactions?: unknown }).interactions);
+    const ov = (n as { overflow?: unknown }).overflow;
+    // legacy docs: derive overflow from the clip flag (clipped frames were "hidden")
+    patch.overflow = ov === 'hidden' || ov === 'scroll' ? ov : (n as { clip?: unknown }).clip === true ? 'hidden' : 'visible';
     const node = createNode(
       VALID_TYPES.includes(n.type as NodeType) ? (n.type as NodeType) : 'rect',
       typeof n.pageId === 'string' ? n.pageId : doc.pages[0],
@@ -668,5 +894,6 @@ export function normalizeDoc(raw: unknown): IrisDoc {
     );
     doc.nodesById[node.id] = node;
   }
+  doc.flows = normalizeFlows((src as { flows?: unknown }).flows, doc);
   return doc;
 }

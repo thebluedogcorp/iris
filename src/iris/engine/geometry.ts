@@ -587,6 +587,47 @@ export function hitTestDeep(doc: IrisDoc, pageId: ID, worldPt: Vec, tolerance: n
 }
 
 /**
+ * Deepest FRAME whose body contains a world point — used by prototype
+ * connector drops. Unlike hitTestDeep (selection-oriented, skips empty
+ * frame interiors), a frame's FULL interior counts here. Non-frame nodes
+ * are transparent; the deepest containing frame in the parent chain wins,
+ * so dropping on empty screen area targets the screen itself.
+ */
+export function frameBodyAtPoint(doc: IrisDoc, pageId: ID, worldPt: Vec): IrisNode | null {
+  const page = doc.pagesById[pageId];
+  if (!page) return null;
+  const frameContains = (n: IrisNode): boolean => {
+    if (!n.visible || n.type !== 'frame') return false;
+    const inv = mInvert(nodeWorldMatrix(doc, n));
+    const p = mApply(inv, worldPt.x, worldPt.y);
+    return p.x >= 0 && p.y >= 0 && p.x <= n.w && p.y <= n.h;
+  };
+  let best: IrisNode | null = null;
+  for (let i = page.nodeIds.length - 1; i >= 0; i--) {
+    const n = doc.nodesById[page.nodeIds[i]];
+    if (n && frameContains(n)) {
+      best = n;
+      break;
+    }
+  }
+  if (!best) return null;
+  for (;;) {
+    let deeper: IrisNode | null = null;
+    const kids = best.children;
+    for (let i = kids.length - 1; i >= 0; i--) {
+      const c = doc.nodesById[kids[i]];
+      if (c && frameContains(c)) {
+        deeper = c;
+        break;
+      }
+    }
+    if (!deeper) break;
+    best = deeper;
+  }
+  return best;
+}
+
+/**
  * Frame name labels are dedicated selection targets (Figma behavior).
  * Returns the root-level frame whose label contains `contentPt` — content
  * coords are canvas coords minus the ruler origin, the same space the

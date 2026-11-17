@@ -4,7 +4,7 @@
  * ruler-guides / eyedropper / pinch-zoom.
  */
 
-import { ID, IrisNode, NodeType, PathPoint } from './model';
+import { ID, IrisDoc, IrisNode, NodeType, PathPoint, rootAncestorOf } from './model';
 import {
   HandleKind,
   Mat,
@@ -15,6 +15,7 @@ import {
   boundsOfNodes,
   computeSnap,
   frameAtPoint,
+  frameBodyAtPoint,
   frameLabelAtPoint,
   hitTestDeep,
   mApply,
@@ -36,7 +37,7 @@ import {
 } from './geometry';
 import { overlay } from './overlay';
 import { useIris, HandleId, type Tool } from './store';
-import { requestDraw, samplePixel } from './renderer';
+import { requestDraw, samplePixel, connectorAnchorWorld } from './renderer';
 import { importImageFiles, openIrisBlob, openIrisFile, pickImageFiles, saveIrisFile } from './files';
 import { pushRecentColor } from './colors';
 
@@ -83,7 +84,8 @@ type Interaction =
   | { kind: 'pathPoint'; index: number; ptsWorld: (PathPoint & { wx: number; wy: number })[]; moved: boolean }
   | { kind: 'pathHandle'; index: number; which: 'in' | 'out'; moved: boolean }
   | { kind: 'guideDrag'; axis: 'x' | 'y'; index: number; entered: boolean }
-  | { kind: 'eyedrop' };
+  | { kind: 'eyedrop' }
+  | { kind: 'connect'; hotspotId: ID; fromW: Vec };
 
 let canvas: HTMLCanvasElement | null = null;
 let interaction: Interaction = { kind: 'none' };
@@ -184,6 +186,32 @@ function hitHandle(content: Vec): HandleId | null {
     if (Math.hypot(content.x - p.x, content.y - p.y) <= 7) return p.kind;
   }
   return null;
+}
+
+/** Prototype connector node under the pointer? Returns the hotspot node id. */
+function connectorHotAt(content: Vec): ID | null {
+  const s = S();
+  if (!s.viewFlags.connections || s.presenting) return null;
+  if (s.selection.length !== 1) return null;
+  if (s.tool !== 'move' && s.rightTab !== 'prototype') return null;
+  if (s.editingTextId || s.editingPathId) return null;
+  const n = s.doc.nodesById[s.selection[0]];
+  if (!n || !n.visible) return null;
+  const a = connectorAnchorWorld(s.doc, n);
+  const sx = a.x * s.viewport.zoom + s.viewport.x;
+  const sy = a.y * s.viewport.zoom + s.viewport.y;
+  return Math.hypot(content.x - sx, content.y - sy) <= 10 ? n.id : null;
+}
+
+/** Resolve a valid destination frame under a world point during a connect drag. */
+function connectorDropTarget(doc: IrisDoc, pageId: ID, world: Vec, hotspotId: ID): ID | null {
+  /* frame BODIES count here (unlike selection, empty interiors are valid
+   * drop targets — Figma highlights the destination screen) */
+  const frame = frameBodyAtPoint(doc, pageId, world);
+  if (!frame) return null;
+  const hotRoot = rootAncestorOf(doc, hotspotId);
+  if (frame.id === hotRoot.id) return null; // can't connect a layer to its own screen
+  return frame.id;
 }
 
 /** Nodes whose ancestor is also in the list are removed (for resize). */
@@ -792,6 +820,19 @@ function onPointerDown(e: PointerEvent): void {
   }
 
   // move tool --------------------------------------------------------
+  // prototype connector node hit? → start authoring a connection
+  const connHit = connectorHotAt(content);
+  if (connHit) {
+    const n = s.doc.nodesById[connHit];
+    if (n) {
+      const fromW = connectorAnchorWorld(s.doc, n);
+      interaction = { kind: 'connect', hotspotId: connHit, fromW };
+      overlay.connectDrag = { hotspotId: connHit, fromW, toW: world, overFrameId: null };
+      setCursor('crosshair');
+      requestDraw();
+      return;
+    }
+  }
   // handle hit? (not for the scale tool — its handles are scale-only)
   const hh = s.tool === 'scale' ? null : hitHandle(content);
   if (hh) {
@@ -945,6 +986,8 @@ function cancelInteraction(): void {
   overlay.guides = [];
   overlay.guideDrag = null;
   overlay.pencilDraft = null;
+  overlay.connectDrag = null;
+  overlay.connectorHot = false;
   requestDraw();
 }
 
@@ -994,6 +1037,18 @@ function onPointerMove(e: PointerEvent): void {
       return;
     }
     if (s.tool === 'move' || s.tool === 'scale') {
+      const conn = connectorHotAt(content);
+      if (conn !== null) {
+        if (!overlay.connectorHot) overlay.connectorHot = true;
+        setCursor('pointer');
+        if (s.hoverId) s.setHover(null);
+        requestDraw();
+        return;
+      }
+      if (overlay.connectorHot) {
+        overlay.connectorHot = false;
+        requestDraw();
+      }
       let hh = hitHandle(content);
       if (s.tool === 'scale' && hh && !(hh === 'nw' || hh === 'ne' || hh === 'sw' || hh === 'se')) hh = null;
       if (hh !== hoverHandle) {
@@ -1022,6 +1077,15 @@ function onPointerMove(e: PointerEvent): void {
   }
 
   switch (interaction.kind) {
+    case 'connect': {
+      const cd = overlay.connectDrag;
+      if (cd) {
+        cd.toW = world;
+        cd.overFrameId = connectorDropTarget(s.doc, s.currentPageId, world, interaction.hotspotId);
+      }
+      requestDraw();
+      return;
+    }
     case 'pan': {
       s.setViewport({
         ...interaction.startVp,
@@ -1285,6 +1349,27 @@ function onPointerUp(e: PointerEvent): void {
 
   const world = eventWorld(e);
   switch (interaction.kind) {
+    case 'connect': {
+      const cd = overlay.connectDrag;
+      const hotspotId = interaction.hotspotId;
+      overlay.connectDrag = null;
+      interaction = { kind: 'none' };
+      setCursor(toolCursor());
+      if (cd?.overFrameId) {
+        const destId = cd.overFrameId;
+        const ixId = s.addInteraction(hotspotId, { destinationId: destId });
+        const dest = s.doc.nodesById[destId];
+        s.toast(`On click → “${dest?.name ?? 'frame'}” — configure in the Prototype panel`, {
+          label: 'Edit',
+          run: () => {
+            useIris.getState().setRightTab('prototype');
+            useIris.getState().setActiveInteractionId(ixId);
+          },
+        });
+      }
+      requestDraw();
+      return;
+    }
     case 'pencil': {
       finishPencil();
       return;
@@ -1918,6 +2003,13 @@ function onKeyDown(e: KeyboardEvent): void {
     e.preventDefault();
     if (e.altKey) s.removeAutoLayout();
     else s.addAutoLayout();
+    return;
+  }
+
+  // Shift+E → toggle prototype connections visibility (field guide §10)
+  if (e.shiftKey && (e.key === 'E' || e.key === 'e') && !e.altKey) {
+    s.setViewFlag('connections', !s.viewFlags.connections);
+    s.toast(s.viewFlags.connections ? 'Prototype connections shown' : 'Prototype connections hidden');
     return;
   }
 
