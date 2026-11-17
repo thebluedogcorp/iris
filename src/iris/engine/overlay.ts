@@ -56,8 +56,8 @@ export interface ConnectDrag {
   fromW: { x: number; y: number };
   /** world-space cursor */
   toW: { x: number; y: number };
-  /** top-level frame currently under the cursor (valid drop target) */
-  overFrameId: ID | null;
+  /** any node (element or frame) currently under the cursor (valid drop target) */
+  overId: ID | null;
 }
 
 export interface OverlayState {

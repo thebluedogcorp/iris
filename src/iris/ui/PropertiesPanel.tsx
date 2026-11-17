@@ -2091,23 +2091,25 @@ function InteractionDetails({ node, ix }: { node: IrisNode; ix: IrisInteraction 
   const updateInteraction = useIris((s) => s.updateInteraction);
   const set = (patch: Partial<IrisInteraction>): void => updateInteraction(node.id, ix.id, patch);
 
-  /* destination options: top-level frames (label w/ size); in scroll-to mode
-     also their direct children, one level deep, prefixed with ↳ */
+  /* destination options: top-level frames + their direct children (↳), so a
+   * connection can target any element — matching the canvas drag behavior */
   const scrollMode = ix.action === 'scroll-to';
   const destOptions: { id: ID; label: string }[] = [];
   for (const f of pageFrames(doc, currentPageId)) {
     destOptions.push({ id: f.id, label: `${f.name} (${Math.round(f.w)}×${Math.round(f.h)})` });
-    if (scrollMode) {
-      for (const childId of f.children) {
-        const c = doc.nodesById[childId];
-        if (c) destOptions.push({ id: c.id, label: `↳ ${c.name}` });
-      }
+    for (const childId of f.children) {
+      const c = doc.nodesById[childId];
+      if (c) destOptions.push({ id: c.id, label: `↳ ${c.name}` });
     }
   }
-  /* keep a deeper/legacy destination selectable */
+  /* keep a deeper/legacy destination selectable (show its screen path) */
   const currentDest = ix.destinationId ? doc.nodesById[ix.destinationId] : undefined;
   if (currentDest && !destOptions.some((o) => o.id === currentDest.id)) {
-    destOptions.push({ id: currentDest.id, label: currentDest.name });
+    const root = currentDest.parentId ? doc.nodesById[currentDest.parentId] : null;
+    destOptions.push({
+      id: currentDest.id,
+      label: root ? `↳ ${currentDest.name} · in ${root.name}` : currentDest.name,
+    });
   }
 
   return (
@@ -2319,7 +2321,7 @@ function InteractionsSection({ node }: { node: IrisNode }) {
     >
       {node.interactions.length === 0 ? (
         <p className="text-[11px] leading-5 text-[#6F6F6F]">
-          No interactions yet. Drag the connector node on canvas, or press + to add one.
+          No interactions yet. Drag the connector ● on any layer to a target — or press + to add one.
         </p>
       ) : (
         <div className="flex flex-col gap-1">
@@ -2476,7 +2478,7 @@ function PresentSection() {
         Present
       </button>
       <p className="mt-2 text-[10px] leading-4 text-[#6F6F6F]">
-        Play your prototype: click hotspots to navigate. Esc exits, R restarts. Ctrl+Enter anywhere.
+        Click hotspots to navigate — every layer can be one. Esc exits, R restarts, Ctrl+Enter presents.
       </p>
       <div className="mt-2.5 flex items-center justify-between">
         <span className="text-[11px] text-[#C9C9C9]">
@@ -2504,7 +2506,9 @@ function PrototypeTab() {
         <InteractionsSection node={single} />
       ) : (
         <Section>
-          <p className="text-[11px] leading-5 text-[#6F6F6F]">Select a layer to author interactions.</p>
+          <p className="text-[11px] leading-5 text-[#6F6F6F]">
+            Select a layer to author interactions — or just hover one on canvas and drag its connector ● to any other layer.
+          </p>
         </Section>
       )}
       <FlowSection />

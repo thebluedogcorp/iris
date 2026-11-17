@@ -4,7 +4,7 @@
  * ruler-guides / eyedropper / pinch-zoom.
  */
 
-import { ID, IrisDoc, IrisNode, NodeType, PathPoint, rootAncestorOf } from './model';
+import { ID, IrisDoc, IrisNode, NodeType, PathPoint, isDescendantOf } from './model';
 import {
   HandleKind,
   Mat,
@@ -188,30 +188,68 @@ function hitHandle(content: Vec): HandleId | null {
   return null;
 }
 
-/** Prototype connector node under the pointer? Returns the hotspot node id. */
+/** Prototype connector node under the pointer? Returns the hotspot node id.
+ *  Candidates: the single selection (always) plus, in the Prototype tab, the
+ *  hovered layer — so any element on screen can be linked without selecting
+ *  it first (Figma hover-handle behavior). */
 function connectorHotAt(content: Vec): ID | null {
   const s = S();
   if (!s.viewFlags.connections || s.presenting) return null;
-  if (s.selection.length !== 1) return null;
-  if (s.tool !== 'move' && s.rightTab !== 'prototype') return null;
   if (s.editingTextId || s.editingPathId) return null;
-  const n = s.doc.nodesById[s.selection[0]];
-  if (!n || !n.visible) return null;
-  const a = connectorAnchorWorld(s.doc, n);
-  const sx = a.x * s.viewport.zoom + s.viewport.x;
-  const sy = a.y * s.viewport.zoom + s.viewport.y;
-  return Math.hypot(content.x - sx, content.y - sy) <= 10 ? n.id : null;
+  if (s.tool !== 'move' && s.rightTab !== 'prototype') return null;
+  const candidates: IrisNode[] = [];
+  if (s.selection.length === 1) {
+    const n = s.doc.nodesById[s.selection[0]];
+    if (n && n.visible) candidates.push(n);
+  }
+  if (s.rightTab === 'prototype' && s.hoverId && s.hoverId !== s.selection[0]) {
+    const h = s.doc.nodesById[s.hoverId];
+    if (h && h.visible) candidates.push(h);
+  }
+  for (const n of candidates) {
+    const a = connectorAnchorWorld(s.doc, n);
+    const sx = a.x * s.viewport.zoom + s.viewport.x;
+    const sy = a.y * s.viewport.zoom + s.viewport.y;
+    if (Math.hypot(content.x - sx, content.y - sy) <= 10) return n.id;
+  }
+  return null;
 }
 
-/** Resolve a valid destination frame under a world point during a connect drag. */
+/** Resolve a valid destination under a world point during a connect drag.
+ *  ANY visible layer counts — buttons, text, shapes, groups, nested frames —
+ *  with the containing frame as fallback for empty areas (Figma behavior). */
 function connectorDropTarget(doc: IrisDoc, pageId: ID, world: Vec, hotspotId: ID): ID | null {
-  /* frame BODIES count here (unlike selection, empty interiors are valid
-   * drop targets — Figma highlights the destination screen) */
-  const frame = frameBodyAtPoint(doc, pageId, world);
-  if (!frame) return null;
-  const hotRoot = rootAncestorOf(doc, hotspotId);
-  if (frame.id === hotRoot.id) return null; // can't connect a layer to its own screen
-  return frame.id;
+  /* 1 · deepest actual element under the cursor (frame bodies are transparent
+   *     here, their border bands still hit) */
+  const tol = 6 / S().viewport.zoom;
+  let target = hitTestDeep(doc, pageId, world, tol);
+  /* 2 · groups catch their own padding area (deepest wins) */
+  if (!target) {
+    let bestDepth = -1;
+    for (const g of Object.values(doc.nodesById)) {
+      if (g.pageId !== pageId || g.type !== 'group' || !g.visible || g.locked) continue;
+      const b = nodeWorldAABB(doc, g);
+      if (world.x < b.x || world.x > b.x + b.w || world.y < b.y || world.y > b.y + b.h) continue;
+      let depth = 0;
+      let p = g.parentId;
+      while (p) {
+        depth += 1;
+        p = doc.nodesById[p]?.parentId ?? null;
+      }
+      if (depth > bestDepth) {
+        bestDepth = depth;
+        target = g;
+      }
+    }
+  }
+  /* 3 · frame body fallback — empty interiors target the screen itself */
+  if (!target) target = frameBodyAtPoint(doc, pageId, world);
+  if (!target) return null;
+  /* never link a layer to itself, its own subtree, or an ancestor of itself */
+  if (target.id === hotspotId) return null;
+  if (isDescendantOf(doc, target.id, hotspotId)) return null; // target inside the hotspot
+  if (isDescendantOf(doc, hotspotId, target.id)) return null; // hotspot inside the target
+  return target.id;
 }
 
 /** Nodes whose ancestor is also in the list are removed (for resize). */
@@ -825,9 +863,11 @@ function onPointerDown(e: PointerEvent): void {
   if (connHit) {
     const n = s.doc.nodesById[connHit];
     if (n) {
+      /* grabbing a hover handle selects the layer (Figma behavior) */
+      if (!s.selection.includes(connHit)) s.setSelection([connHit]);
       const fromW = connectorAnchorWorld(s.doc, n);
       interaction = { kind: 'connect', hotspotId: connHit, fromW };
-      overlay.connectDrag = { hotspotId: connHit, fromW, toW: world, overFrameId: null };
+      overlay.connectDrag = { hotspotId: connHit, fromW, toW: world, overId: null };
       setCursor('crosshair');
       requestDraw();
       return;
@@ -1041,7 +1081,8 @@ function onPointerMove(e: PointerEvent): void {
       if (conn !== null) {
         if (!overlay.connectorHot) overlay.connectorHot = true;
         setCursor('pointer');
-        if (s.hoverId) s.setHover(null);
+        /* keep hoverId — the hovered node's handle must stay visible */
+        if (s.hoverId && s.hoverId !== conn && !s.selection.includes(conn)) s.setHover(conn);
         requestDraw();
         return;
       }
@@ -1081,7 +1122,7 @@ function onPointerMove(e: PointerEvent): void {
       const cd = overlay.connectDrag;
       if (cd) {
         cd.toW = world;
-        cd.overFrameId = connectorDropTarget(s.doc, s.currentPageId, world, interaction.hotspotId);
+        cd.overId = connectorDropTarget(s.doc, s.currentPageId, world, interaction.hotspotId);
       }
       requestDraw();
       return;
@@ -1355,11 +1396,11 @@ function onPointerUp(e: PointerEvent): void {
       overlay.connectDrag = null;
       interaction = { kind: 'none' };
       setCursor(toolCursor());
-      if (cd?.overFrameId) {
-        const destId = cd.overFrameId;
+      if (cd?.overId) {
+        const destId = cd.overId;
         const ixId = s.addInteraction(hotspotId, { destinationId: destId });
         const dest = s.doc.nodesById[destId];
-        s.toast(`On click → “${dest?.name ?? 'frame'}” — configure in the Prototype panel`, {
+        s.toast(`On click → “${dest?.name ?? 'layer'}” — configure in the Prototype panel`, {
           label: 'Edit',
           run: () => {
             useIris.getState().setRightTab('prototype');
@@ -2060,6 +2101,13 @@ function onKeyDown(e: KeyboardEvent): void {
     case 'escape': {
       if (overlay.penDraft) {
         finishPen(false);
+        return;
+      }
+      if (overlay.connectDrag) {
+        overlay.connectDrag = null;
+        if (interaction.kind === 'connect') interaction = { kind: 'none' };
+        setCursor(toolCursor());
+        requestDraw();
         return;
       }
       if (overlay.pencilDraft) {

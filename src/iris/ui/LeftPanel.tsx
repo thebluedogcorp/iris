@@ -486,6 +486,14 @@ function LayersView() {
             >
               {node.name}
             </span>
+            {node.interactions?.length ? (
+              <span
+                className="flex h-4 shrink-0 items-center rounded-sm bg-[#0D99FF]/15 px-1 text-[9px] font-semibold leading-none text-[#0D99FF] group-hover:hidden"
+                title={`${node.interactions.length} interaction${node.interactions.length > 1 ? 's' : ''}`}
+              >
+                {node.interactions.length}⚡
+              </span>
+            ) : null}
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 has-[button[data-visible]]:opacity-100">
               <button
                 type="button"

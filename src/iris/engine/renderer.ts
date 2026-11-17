@@ -1117,27 +1117,38 @@ function drawPrototypeOverlay(
     c.textBaseline = 'alphabetic';
   }
 
-  /* connector node on the single selection (prototype authoring handle) */
+  /* connector handles: the single selection (authoring handle) plus, in the
+   * Prototype tab, the hovered layer — every element is linkable on sight */
   const single = s.selection.length === 1 ? doc.nodesById[s.selection[0]] : null;
   const showHandle =
     single &&
     (s.tool === 'move' || s.rightTab === 'prototype') &&
     !s.editingTextId &&
     !s.editingPathId;
-  if (showHandle && single) {
-    const anchor = connectorAnchorWorld(doc, single);
+  const hovered = s.hoverId ? doc.nodesById[s.hoverId] : null;
+  const showHoverHandle =
+    hovered &&
+    s.rightTab === 'prototype' &&
+    s.viewFlags.connections &&
+    !s.presenting &&
+    (s.tool === 'move' || s.tool === 'scale') &&
+    !s.editingTextId &&
+    !s.editingPathId &&
+    hovered.id !== single?.id;
+  const drawConnectorDot = (n: IrisNode, hot: boolean, subtle: boolean): void => {
+    const anchor = connectorAnchorWorld(doc, n);
     const pos = toScreen(anchor);
-    const r = overlay.connectorHot ? 8 : 6.5;
+    const r = hot ? 8 : subtle ? 5 : 6.5;
     c.setLineDash([]);
-    c.fillStyle = '#FFFFFF';
-    c.strokeStyle = overlay.connectorHot ? ACCENT : CONNECT_GRAY;
+    c.fillStyle = subtle ? '#2A2A2A' : '#FFFFFF';
+    c.strokeStyle = hot ? ACCENT : CONNECT_GRAY;
     c.lineWidth = 1.5;
     c.beginPath();
     c.arc(pos.x, pos.y, r, 0, Math.PI * 2);
     c.fill();
     c.stroke();
     // tiny arrow glyph
-    c.strokeStyle = overlay.connectorHot ? ACCENT : '#6F6F6F';
+    c.strokeStyle = hot ? ACCENT : '#6F6F6F';
     c.lineWidth = 1.2;
     const g = r * 0.42;
     c.beginPath();
@@ -1147,23 +1158,43 @@ function drawPrototypeOverlay(
     c.lineTo(pos.x + g * 0.7, pos.y);
     c.lineTo(pos.x + g * 0.1, pos.y + g * 0.7);
     c.stroke();
-  }
+  };
+  if (showHandle && single) drawConnectorDot(single, overlay.connectorHot, false);
+  if (showHoverHandle && hovered) drawConnectorDot(hovered, false, true);
 
   /* live connector drag + destination highlight */
   const cd = overlay.connectDrag;
   if (cd) {
-    if (cd.overFrameId) {
-      const dest = doc.nodesById[cd.overFrameId];
-      if (dest) {
-        const b = nodeWorldAABB(doc, dest);
-        const p = toScreen({ x: b.x, y: b.y });
-        c.fillStyle = 'rgba(13,153,255,0.08)';
-        c.strokeStyle = ACCENT;
-        c.lineWidth = 1.5;
-        c.setLineDash([]);
-        c.fillRect(p.x, p.y, b.w * vp.zoom, b.h * vp.zoom);
-        c.strokeRect(p.x, p.y, b.w * vp.zoom, b.h * vp.zoom);
-      }
+    const dest = cd.overId ? doc.nodesById[cd.overId] : null;
+    if (dest) {
+      const b = nodeWorldAABB(doc, dest);
+      const p = toScreen({ x: b.x, y: b.y });
+      const w = b.w * vp.zoom;
+      const h = b.h * vp.zoom;
+      c.setLineDash([]);
+      c.fillStyle = 'rgba(13,153,255,0.10)';
+      c.strokeStyle = ACCENT;
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.roundRect(p.x, p.y, w, h, 4);
+      c.fill();
+      c.stroke();
+      /* destination name chip under the highlighted box */
+      c.font = '600 10px Inter, system-ui, sans-serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      const label = dest.name;
+      const tw = c.measureText(label).width;
+      const cw = tw + 14;
+      const cx = p.x + w / 2;
+      const cy = p.y + h + 14;
+      c.fillStyle = 'rgba(13,153,255,0.95)';
+      c.beginPath();
+      c.roundRect(cx - cw / 2, cy - 8, cw, 16, 8);
+      c.fill();
+      c.fillStyle = '#FFFFFF';
+      c.fillText(label, cx, cy + 0.5);
+      c.textBaseline = 'alphabetic';
     }
     const from = toScreen(cd.fromW);
     const to = toScreen(cd.toW);
@@ -1179,6 +1210,27 @@ function drawPrototypeOverlay(
     c.beginPath();
     c.arc(to.x, to.y, 4, 0, Math.PI * 2);
     c.fill();
+    /* "On click → …" chip near the cursor */
+    const hotName = doc.nodesById[cd.hotspotId]?.name ?? '';
+    const dragLabel = dest ? `On click · ${hotName} → ${dest.name}` : `Link ${hotName} — drop on any layer`;
+    c.font = '600 10px Inter, system-ui, sans-serif';
+    c.textAlign = 'left';
+    c.textBaseline = 'middle';
+    const lw = c.measureText(dragLabel).width + 16;
+    let lx = to.x + 12;
+    let ly = to.y - 24;
+    if (lx + lw > W - 8) lx = to.x - lw - 12;
+    if (ly < 8) ly = to.y + 16;
+    c.fillStyle = 'rgba(30,30,30,0.95)';
+    c.strokeStyle = dest ? ACCENT : '#4E4E4E';
+    c.lineWidth = 1;
+    c.beginPath();
+    c.roundRect(lx, ly, lw, 18, 9);
+    c.fill();
+    c.stroke();
+    c.fillStyle = dest ? '#FFFFFF' : '#B9B9B9';
+    c.fillText(dragLabel, lx + 8, ly + 9.5);
+    c.textBaseline = 'alphabetic';
   }
 }
 

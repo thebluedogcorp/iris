@@ -15,6 +15,7 @@ import { drawNodes, setExportPass } from '../engine/renderer';
 import { loadImage } from '../engine/imageCache';
 import {
   collectSubtree,
+  rootAncestorOf,
   type ID,
   type IrisInteraction,
   type IrisNode,
@@ -110,8 +111,11 @@ function hotspotsOf(doc: ReturnType<typeof useIris.getState>['doc'], frameId: ID
   const frame = doc.nodesById[frameId];
   if (!frame) return [];
   const out: Hotspot[] = [];
+  /* pre-order subtree: the frame root lands FIRST, so children (later in the
+   * array) win the reverse top-hotspot scan. The root itself is a hotspot —
+   * frame-level connections fire when clicking anywhere on the screen. */
   for (const n of collectSubtree(doc, frameId)) {
-    if (!n.visible || n.id === frameId || !n.interactions?.length) continue;
+    if (!n.visible || !n.interactions?.length) continue;
     const b = nodeWorldAABB(doc, n);
     out.push({ id: n.id, x: b.x, y: b.y, w: b.w, h: b.h, ixs: n.interactions });
   }
@@ -273,6 +277,9 @@ const KEYFRAMES = `
 @keyframes irisOutT { from { transform: translateY(0) } to { transform: translateY(-100%) } }
 @keyframes irisOutB { from { transform: translateY(0) } to { transform: translateY(100%) } }
 @keyframes irisOvIn { from { opacity: 0; transform: scale(0.96) } to { opacity: 1; transform: scale(1) } }
+@keyframes irisPresentIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes irisRipple { from { opacity: 0.55; transform: scale(0.35) } to { opacity: 0; transform: scale(1.6) } }
+@keyframes irisNameIn { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: translateY(0) } }
 .iris-screen { position: absolute; inset: 0; will-change: transform, opacity; }
 `;
 
@@ -390,6 +397,7 @@ export function PresentationView() {
   const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
   const smoothRafRef = useRef(0);
   const runRef = useRef<(ix: IrisInteraction) => void>(() => undefined);
+  const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
 
   const currentFrame = currentFrameId ? doc.nodesById[currentFrameId] : null;
   const total = frames.length;
@@ -425,7 +433,9 @@ export function PresentationView() {
   const navigateTo = useCallback(
     (destId: ID | null, ix: IrisInteraction | null): void => {
       const s = useIris.getState();
-      const dest = destId ? s.doc.nodesById[destId] : null;
+      /* element destinations resolve to their top-level screen (frame) */
+      const destNode = destId ? s.doc.nodesById[destId] : null;
+      const dest = destNode ? rootAncestorOf(s.doc, destNode.id) : null;
       if (!dest || dest.type !== 'frame' || dest.id === currentFrameId) return;
       clearTimers();
       setOverlay(null);
@@ -492,6 +502,27 @@ export function PresentationView() {
     scheduleDelays(entryFrameId);
   }, [clearTimers, entryFrameId, scheduleDelays]);
 
+  /** Direct scrub to a specific screen (frame dots) — no back-stack entry. */
+  const jumpTo = useCallback(
+    (frameId: ID): void => {
+      if (frameId === currentFrameId) return;
+      clearTimers();
+      setOverlay(null);
+      setTransition(null);
+      setScroll(ZERO_SCROLL);
+      setCurrentFrameId(frameId);
+      scheduleDelays(frameId);
+    },
+    [clearTimers, currentFrameId, scheduleDelays],
+  );
+
+  /** Tactile click feedback at the hotspot fire point. */
+  const spawnRipple = useCallback((x: number, y: number): void => {
+    const id = x * 1000 + y + Math.random();
+    setRipples((r) => [...r.slice(-4), { id, x, y }]);
+    setTimeout(() => setRipples((r) => r.filter((p) => p.id !== id)), 480);
+  }, []);
+
   /* ---------- scroll-to (smooth) ---------- */
 
   const scrollToNode = useCallback(
@@ -538,7 +569,8 @@ export function PresentationView() {
           break;
         case 'overlay': {
           const s = useIris.getState();
-          const dest = ix.destinationId ? s.doc.nodesById[ix.destinationId] : null;
+          const destNode = ix.destinationId ? s.doc.nodesById[ix.destinationId] : null;
+          const dest = destNode ? rootAncestorOf(s.doc, destNode.id) : null;
           if (dest && dest.type === 'frame') {
             setOverlay({ frameId: dest.id, ix });
             scheduleDelays(dest.id);
@@ -669,16 +701,22 @@ export function PresentationView() {
         };
         if (pointInRect(e.clientX, e.clientY, r)) {
           const hot = topHotspotAt(e.clientX, e.clientY);
-          if (hot) fireHotspot(hot, 'click');
+          if (hot) {
+            fireHotspot(hot, 'click');
+            spawnRipple(e.clientX, e.clientY);
+          }
         } else if (overlay?.ix.overlayCloseOutside !== false) {
           setOverlay(null);
         }
         return;
       }
       const hot = topHotspotAt(e.clientX, e.clientY);
-      if (hot) fireHotspot(hot, 'click');
+      if (hot) {
+        fireHotspot(hot, 'click');
+        spawnRipple(e.clientX, e.clientY);
+      }
     },
-    [doc, fireHotspot, ovFit, ovFrame, overlay, topHotspotAt],
+    [doc, fireHotspot, ovFit, ovFrame, overlay, spawnRipple, topHotspotAt],
   );
 
   /* ---------- wheel scroll (non-passive) ---------- */
@@ -780,8 +818,24 @@ export function PresentationView() {
         }
       : undefined;
 
+  /* hovered hotspot ring (screen-space, above the canvas) */
+  const hoveredRect = useMemo(() => {
+    if (!hovered) return null;
+    const ov = ovHotspots.find((h) => h.id === hovered);
+    if (ov) return hotspotScreenRect(ov, ovFit, ZERO_SCROLL);
+    const base = baseHotspots.find((h) => h.id === hovered);
+    if (base) return hotspotScreenRect(base, baseFit, scroll);
+    return null;
+  }, [hovered, ovHotspots, ovFit, baseHotspots, baseFit, scroll]);
+
   return (
-    <div className="fixed inset-0 z-[80] bg-[#1E1E1E]" role="dialog" aria-modal="true" aria-label="Presentation">
+    <div
+      className="fixed inset-0 z-[80] bg-[#141414]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Presentation"
+      style={{ animation: 'irisPresentIn 200ms ease-out both' }}
+    >
       <style>{KEYFRAMES}</style>
 
       <div
@@ -860,79 +914,140 @@ export function PresentationView() {
             </div>
           </>
         ) : null}
+
+        {/* hovered hotspot ring — soft affordance on interactive layers */}
+        {hoveredRect && !transition ? (
+          <div
+            className="pointer-events-none absolute z-30 rounded-md"
+            style={{
+              left: hoveredRect.x,
+              top: hoveredRect.y,
+              width: hoveredRect.w,
+              height: hoveredRect.h,
+              boxShadow: '0 0 0 1.5px rgba(13,153,255,0.9), 0 0 18px rgba(13,153,255,0.35)',
+              background: 'rgba(13,153,255,0.06)',
+              transition: 'left 90ms ease-out, top 90ms ease-out, width 90ms ease-out, height 90ms ease-out',
+            }}
+          />
+        ) : null}
+
+        {/* click ripples */}
+        {ripples.map((r) => (
+          <span
+            key={r.id}
+            className="pointer-events-none absolute z-30"
+            style={{
+              left: r.x - 26,
+              top: r.y - 26,
+              width: 52,
+              height: 52,
+              borderRadius: '50%',
+              border: '2px solid rgba(13,153,255,0.85)',
+              background: 'rgba(13,153,255,0.12)',
+              animation: 'irisRipple 460ms cubic-bezier(0, 0, 0.58, 1) both',
+            }}
+          />
+        ))}
       </div>
 
-      {/* bottom pill bar */}
+      {/* bottom control bar */}
       <div
-        className="absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[#3E3E3E] bg-[rgba(30,30,30,0.9)] px-3 py-1.5 shadow-lg backdrop-blur"
+        className="absolute bottom-5 left-1/2 z-10 -translate-x-1/2"
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
-        <button
-          type="button"
-          aria-label="Back to previous screen"
-          title="Back (Backspace)"
-          disabled={backStack.length === 0}
-          onClick={goBack}
-          className="flex h-7 w-7 items-center justify-center rounded-full text-[#E5E5E5] transition-colors hover:bg-[#383838] disabled:pointer-events-none disabled:opacity-30"
-        >
-          <Undo2 size={15} />
-        </button>
-        <button
-          type="button"
-          aria-label="Previous frame"
-          title="Previous frame"
-          disabled={total === 0 || idx <= 0}
-          onClick={() => stepFrame(-1)}
-          className="flex h-7 w-7 items-center justify-center rounded-full text-[#E5E5E5] transition-colors hover:bg-[#383838] disabled:pointer-events-none disabled:opacity-30"
-        >
-          <ChevronLeft size={16} />
-        </button>
-        <div className="flex min-w-0 flex-col items-center leading-tight">
-          <span className="max-w-[240px] truncate text-[12px] text-[#E5E5E5]">
-            {currentFrame ? currentFrame.name : ''}
-          </span>
-          <span className="text-[11px] text-[#9A9A9A]">
-            {idx >= 0 ? `${idx + 1} / ${total}` : '—'}
-          </span>
+        <div className="flex max-w-[86vw] items-center gap-2.5 overflow-x-auto rounded-2xl border border-white/10 bg-black/60 px-3.5 py-2 shadow-2xl shadow-black/50 backdrop-blur-xl">
+          <button
+            type="button"
+            aria-label="Back to previous screen"
+            title="Back (Backspace)"
+            disabled={backStack.length === 0}
+            onClick={goBack}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#E5E5E5] transition-all hover:bg-white/10 disabled:pointer-events-none disabled:opacity-30"
+          >
+            <Undo2 size={15} />
+          </button>
+          <span className="h-5 w-px shrink-0 bg-white/10" aria-hidden />
+          <button
+            type="button"
+            aria-label="Previous frame"
+            title="Previous frame"
+            disabled={total === 0 || idx <= 0}
+            onClick={() => stepFrame(-1)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#E5E5E5] transition-all hover:bg-white/10 disabled:pointer-events-none disabled:opacity-30"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <div className="flex min-w-0 shrink-0 flex-col items-center leading-tight" style={{ minWidth: 120 }}>
+            <span key={currentFrame?.id ?? 'none'} className="max-w-[240px] truncate text-[12px] font-semibold text-white" style={{ animation: 'irisNameIn 240ms ease-out both' }}>
+              {currentFrame ? currentFrame.name : ''}
+            </span>
+            <span className="text-[10.5px] text-[#8F8F8F]">
+              {idx >= 0 ? `Screen ${idx + 1} of ${total}` : '—'}
+              {backStack.length > 0 ? ` · ${backStack.length} back` : ''}
+            </span>
+          </div>
+          <button
+            type="button"
+            aria-label="Next frame"
+            title="Next frame"
+            disabled={total === 0 || idx >= total - 1}
+            onClick={() => stepFrame(1)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#E5E5E5] transition-all hover:bg-white/10 disabled:pointer-events-none disabled:opacity-30"
+          >
+            <ChevronRight size={16} />
+          </button>
+          <span className="h-5 w-px shrink-0 bg-white/10" aria-hidden />
+          {/* frame scrubber dots */}
+          {total > 1 ? (
+            <div className="flex shrink-0 items-center gap-1.5 px-0.5">
+              {frames.map((f, i) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  aria-label={`Go to ${f.name}`}
+                  title={f.name}
+                  onClick={() => jumpTo(f.id)}
+                  className="group relative flex h-4 w-4 items-center justify-center"
+                >
+                  <span
+                    className={`block rounded-full transition-all duration-200 ${
+                      i === idx ? 'h-2 w-2 bg-[#0D99FF] shadow-[0_0_8px_rgba(13,153,255,0.8)]' : 'h-1.5 w-1.5 bg-white/30 group-hover:bg-white/70'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <span className="h-5 w-px shrink-0 bg-white/10" aria-hidden />
+          <button
+            type="button"
+            aria-label="Restart prototype"
+            title="Restart (R)"
+            onClick={restart}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#E5E5E5] transition-all hover:bg-white/10"
+          >
+            <RotateCcw size={14} />
+          </button>
+          <button
+            type="button"
+            aria-label="Toggle hotspot hints"
+            title="Show hotspot hints"
+            data-active={showHints}
+            aria-pressed={showHints}
+            onClick={() => setShowHints((v) => !v)}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all ${
+              showHints ? 'bg-[#0D99FF] text-white shadow-[0_0_10px_rgba(13,153,255,0.5)]' : 'text-[#E5E5E5] hover:bg-white/10'
+            }`}
+          >
+            <MousePointerClick size={15} />
+          </button>
         </div>
-        <button
-          type="button"
-          aria-label="Next frame"
-          title="Next frame"
-          disabled={total === 0 || idx >= total - 1}
-          onClick={() => stepFrame(1)}
-          className="flex h-7 w-7 items-center justify-center rounded-full text-[#E5E5E5] transition-colors hover:bg-[#383838] disabled:pointer-events-none disabled:opacity-30"
-        >
-          <ChevronRight size={16} />
-        </button>
-        <button
-          type="button"
-          aria-label="Restart prototype"
-          title="Restart (R)"
-          onClick={restart}
-          className="flex h-7 w-7 items-center justify-center rounded-full text-[#E5E5E5] transition-colors hover:bg-[#383838]"
-        >
-          <RotateCcw size={14} />
-        </button>
-        <button
-          type="button"
-          aria-label="Toggle hotspot hints"
-          title="Show hotspot hints"
-          data-active={showHints}
-          aria-pressed={showHints}
-          onClick={() => setShowHints((v) => !v)}
-          className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
-            showHints ? 'bg-[#0D99FF] text-white' : 'text-[#E5E5E5] hover:bg-[#383838]'
-          }`}
-        >
-          <MousePointerClick size={15} />
-        </button>
       </div>
 
-      <div className="pointer-events-none absolute right-4 top-4 flex flex-col items-end gap-0.5">
-        <p className="text-[11px] text-[#6F6F6F]">Esc to exit</p>
-        <p className="text-[11px] text-[#6F6F6F]">R to restart</p>
+      <div className="pointer-events-none absolute right-4 top-4 flex flex-col items-end gap-1">
+        <span className="rounded-md bg-black/45 px-2 py-1 text-[10.5px] text-[#8F8F8F] backdrop-blur">Esc to exit</span>
+        <span className="rounded-md bg-black/45 px-2 py-1 text-[10.5px] text-[#8F8F8F] backdrop-blur">R to restart</span>
       </div>
     </div>
   );
